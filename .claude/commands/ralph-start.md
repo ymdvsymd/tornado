@@ -1,5 +1,6 @@
 ---
-description: '計画ファイル(Markdown)からtornado Ralph モードの入力ファイルを生成し起動する'
+description: 'Convert a plan file (Markdown) to tornado Ralph mode input files and launch tornado'
+arguments: plan_file:計画ファイル(Markdown)のパス
 ---
 
 # ralph-start: 計画ファイル -> tornado Ralph モード起動
@@ -41,7 +42,12 @@ description: '計画ファイル(Markdown)からtornado Ralph モードの入力
 
 ### Phase 2: 計画ファイル -> マイルストーン + タスク変換
 
-計画ファイルの Markdown を以下の規則でパースする:
+計画ファイルの Markdown を以下の規則でパースする。
+
+**重要: 計画ファイルが日本語の場合、英語に翻訳してからタスク化する。**
+- `description` 内の Task / Acceptance Criteria / Plan Context はすべて英語で記述する
+- `goal` フィールドも英語にする
+- コード内の識別子やファイルパスはそのまま保持する
 
 #### パース規則
 
@@ -66,21 +72,41 @@ description: '計画ファイル(Markdown)からtornado Ralph モードの入力
 
 #### description の拡張（最重要）
 
-`description` は Builder (Codex/Claude Code) に渡される**唯一の入力**である。system_prompt は空、milestone の goal も渡されない。
+`description` は Builder (Codex/Claude Code) に渡される**唯一の入力**である。
+system_prompt は空、milestone の goal も渡されない。
 
-したがって、各タスクの `description` は以下を満たすように**拡張**すること:
+各タスクの `description` は以下の3セクションで構成すること。**すべて英語で記述する**（計画ファイルが日本語の場合は翻訳する）。
+
+##### 1. Task（実装指示）
 - 曖昧な項目は具体的な実装指示に書き換える
 - ファイルパス、期待する動作、実装の詳細を含める
 - Claude Code に直接指示するのと同じ粒度で書く
 
-さらに、各タスクの `description` 末尾に計画ファイルの全内容をコンテキストとして埋め込む:
+##### 2. Acceptance Criteria（受け入れ条件）
+Builder エージェントが**タスク完了後に自分自身で検証可能**な条件を必ず含める。
+条件は以下の3種類のみ。曖昧な条件は禁止。
+
+- **File exists**: `- [ ] File exists: <path>`
+- **Contains**: `- [ ] <path> contains: <expected content>`
+- **Command**: `- [ ] Run: <command> → <expected result>`
+
+##### 3. Plan Context
+計画ファイルの全内容を**英語に翻訳して**埋め込む。
+
+##### description テンプレート
 
 ```
-<具体的なタスク指示（拡張済み）>
+## Task
+<concrete implementation instructions in English>
+
+## Acceptance Criteria
+- [ ] File exists: <path>
+- [ ] <path> contains: <expected content>
+- [ ] Run: <command> → <expected result>
 
 ---
 ## Plan Context
-<元の計画ファイルの全内容>
+<full plan file content, translated to English>
 ```
 
 ---
@@ -96,13 +122,13 @@ description: '計画ファイル(Markdown)からtornado Ralph モードの入力
   "milestones": [
     {
       "id": "m1",
-      "goal": "## 見出しから取得した目標テキスト",
+      "goal": "Goal text from ## heading (in English)",
       "status": "pending",
       "current_wave": 0,
       "tasks": [
         {
           "id": "m1-t1",
-          "description": "具体的で自己完結した実行指示。...\n\n---\n## Plan Context\n...",
+          "description": "## Task\n<concrete instructions in English>\n\n## Acceptance Criteria\n- [ ] File exists: <path>\n- [ ] <path> contains: <expected content>\n- [ ] Run: <command> → <expected result>\n\n---\n## Plan Context\n...",
           "wave": 0,
           "status": "pending",
           "result": null,
@@ -176,7 +202,7 @@ description: '計画ファイル(Markdown)からtornado Ralph モードの入力
 
 3. **tornado 起動**:
    ```bash
-   npx -y @mizchi/tornado --ralph --config=<tornado.json の絶対パス>
+   npx -y @mizchi/tornado --ralph --config=<tornado.json の絶対パス> --lang=ja
    ```
 
 ---
