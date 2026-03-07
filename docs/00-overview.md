@@ -1,0 +1,113 @@
+# Tornado - Multi-Agent Development Orchestrator: 総合調査報告
+
+**調査日**: 2026-03-07
+**調査手法**: 5つの専門エージェントによる並行多角的調査
+**リポジトリ**: https://github.com/mizchi/tornado
+**バージョン**: 0.5.0 (MoonBit) / 0.4.0 (npm)
+
+---
+
+## プロジェクト概要
+
+Tornado は **MoonBit** で実装されたマルチエージェント開発オーケストレーターです。
+複数の AI エージェント（Claude Code, OpenAI Codex）を統合し、タスク分解・実行・レビュー・フィードバックの自律開発ループを実現します。
+
+### 技術スタック
+
+| 項目 | 技術 |
+|------|------|
+| コア言語 | MoonBit (JSターゲット) |
+| SDK層 | TypeScript (ES2022) |
+| 外部依存 | @anthropic-ai/claude-agent-sdk, @openai/codex-sdk |
+| MoonBit依存 | mizchi/llm, mizchi/x, mizchi/tui |
+| ビルド | moon + npm + justfile |
+| ランタイム | Node.js >= 18 |
+| 配布 | npm (@mizchi/tornado) |
+
+### 2つの実行モード
+
+1. **通常モード** (Heartbeat Loop): `run_repl()` 内の `while true` 無限ループで `run_dev()` → `run_review()` を繰り返す自律開発ループ（Ctrl+C で終了）
+2. **Ralph モード** (`--ralph`): マイルストーン駆動自律開発（Planner → Builder → Verifier）
+
+> **Note:** `src/orchestrator/orchestrator.mbt` に定義された `Orchestrator::run()` は
+> 現在のランタイムパスからは呼ばれておらず、通常モードは `run_repl()` が直接制御している。
+
+---
+
+## 調査ドキュメント一覧
+
+| # | ファイル | 調査視点 | 内容 |
+|---|---------|---------|------|
+| 1 | [01-architecture.md](./01-architecture.md) | アーキテクチャ | モジュール依存関係、レイヤー構造、設計パターン、データフロー |
+| 2 | [02-moonbit-core.md](./02-moonbit-core.md) | MoonBitコア | 全11モジュールの実装詳細、型定義、状態遷移、API |
+| 3 | [03-sdk-integration.md](./03-sdk-integration.md) | SDK統合 | TypeScript SDK、Claude/Codex統合、FFIブリッジ、ストリーミング |
+| 4 | [04-testing-quality.md](./04-testing-quality.md) | テスト品質 | 16テストファイル、165テストケース、カバレッジ、ビルドシステム |
+| 5 | [05-workflow-ralph.md](./05-workflow-ralph.md) | ワークフロー | Ralph自律ループ、オーケストレーション、レビューサイクル |
+
+---
+
+## プロジェクト構造
+
+```
+tornado/
+  moon.mod.json          # MoonBit パッケージ定義
+  package.json           # npm パッケージ定義
+  tornado.json           # デフォルト設定ファイル
+  justfile               # ビルドタスク
+  tsconfig.sdk.json      # TypeScript SDK 設定
+  src/
+    types/               # Layer 0: ドメイン型定義
+    config/              # Layer 1: 設定パース・バリデーション
+    cli/                 # Layer 1: CLI引数パース
+    task/                # Layer 1: タスク管理
+    spawn/               # Layer 1: プロセス起動
+    display/             # Layer 1: 表示フォーマット
+    agent/               # Layer 2: エージェント抽象化・実行
+    review/              # Layer 2: 3観点レビュー
+    ralph/               # Layer 3: マイルストーン駆動自律ループ
+    orchestrator/        # Layer 3: タスクオーケストレーション
+    tui/                 # UI: TUI状態管理・描画
+    cmd/app/             # Layer 4: エントリーポイント・FFI
+  sdk/
+    runner-io.mts        # 共通I/O
+    agent-adapter.mts    # アダプター抽象インターフェース
+    agent-runner.mts     # 実行エンジン
+    claude-adapter.mts   # Claude Agent SDK 統合
+    claude-runner.mts    # Claude ランナー
+    codex-adapter.mts    # Codex SDK 統合
+    codex-runner.mts     # Codex ランナー
+    codex-normalizer.mts # Codex→Claude 形式正規化
+    stdin-watcher.mjs    # ユーザー入力監視
+```
+
+---
+
+## 主要な調査所見
+
+### 強み
+
+1. **型安全な状態管理** - MoonBitの代数的データ型でコンパイル時に状態網羅性を保証
+2. **AgentBackend trait** - 新エージェント種追加が容易なプラグイン設計
+3. **統一ストリーミング** - Claude/Codexの異なるイベント形式をアダプターで統一
+4. **3観点レビュー** - CodeQuality/Performance/Security の独立レビューとマージ
+5. **テストカバレッジ 59.5%** - コアロジック中心に165テストケース
+6. **明確なレイヤー分離** - types → config → agent → orchestrator → main
+
+### 改善余地
+
+1. **Verifier フィードバック未活用** - NeedsRework の指摘が Builder に伝わらない
+2. **Wave 並列実行未実装** - 設計上は並列可能だが順序実行
+3. **SDK統合テスト不足** - アダプター実装の実動作テストが少ない
+4. **タイムアウト固定** - FFI の10分タイムアウトが設定不可
+
+### 品質スコア
+
+| 領域 | 評価 |
+|------|------|
+| コア機能 (Agent, Config, CLI) | A |
+| 複雑ロジック (Ralph, Orchestrator) | A |
+| SDK統合層 | B |
+| TUI/表示 | B |
+| テストカバレッジ | B+ |
+| ドキュメント | C |
+| 全体 | **8.2/10** |
