@@ -246,14 +246,53 @@ fn RalphLoop::verify_wave(
   }
 }
 
+fn strip_task_feedback_prefix(item : String, task_id : String) -> String {
+  let colon_prefix = task_id + ":"
+  if item.has_prefix(colon_prefix) {
+    return item
+      .view(start_offset=colon_prefix.length())
+      .to_string()
+      .trim()
+      .to_string()
+  }
+  let space_prefix = task_id + " "
+  if item.has_prefix(space_prefix) {
+    return item
+      .view(start_offset=space_prefix.length())
+      .to_string()
+      .trim()
+      .to_string()
+  }
+  item
+}
+
 ///| Re-execute tasks that need rework
 fn RalphLoop::rework_tasks(
   self : RalphLoop,
   milestone : @types.Milestone,
   wave : Int,
-  _feedback : Array[String],
+  feedback : Array[String],
 ) -> Array[(String, String)] {
   let tasks = self.milestone_manager.get_wave_tasks(milestone, wave)
+
+  let mut matched_any = false
+  for item in feedback {
+    for task in tasks {
+      if item.has_prefix(task.id + ":") || item.has_prefix(task.id + " ") {
+        task.status = Pending
+        matched_any = true
+      }
+    }
+  }
+  if not(matched_any) && not(feedback.is_empty()) {
+    for task in tasks {
+      match task.status {
+        Done => task.status = Pending
+        _ => ()
+      }
+    }
+  }
+
   let builder_id = find_agent_id(self.config, @types.AgentRole::Dev)
   let builder_backend = match builder_id {
     Some(id) => find_backend(self.backends, id)
@@ -264,11 +303,30 @@ fn RalphLoop::rework_tasks(
     Some(backend) => {
       let bid = builder_id.unwrap()
       for task in tasks {
-        // Reset and re-execute pending/failed tasks
         match task.status {
           Failed(_) | Pending => {
             task.status = InProgress(bid)
-            let rework_prompt = "Rework: " + task.description
+            let task_feedback = StringBuilder::new()
+            for item in feedback {
+              if item.has_prefix(task.id + ":") || item.has_prefix(task.id + " ") {
+                let task_feedback_item = strip_task_feedback_prefix(item, task.id)
+                task_feedback.write_string("- ")
+                task_feedback.write_string(task_feedback_item)
+                task_feedback.write_string("\n")
+              }
+            }
+            let task_feedback_str = task_feedback.to_string()
+            let feedback_str = if task_feedback_str.is_empty() {
+              feedback.iter().fold(
+                init="",
+                fn(acc, item) { acc + "- " + item + "\n" },
+              )
+            } else {
+              task_feedback_str
+            }
+            let rework_prompt = task.description +
+              "\n\nFeedback from verifier:\n" + feedback_str
+            emit_info(self, "Reworking task \{task.id}")
             let result = backend.run(
               rework_prompt, "", fn(e) { handle_event(self, bid, e) },
             )
@@ -284,7 +342,7 @@ fn RalphLoop::rework_tasks(
               }
             }
           }
-          _ => () // Already done, skip
+          _ => ()
         }
       }
       collect_wave_results(tasks)

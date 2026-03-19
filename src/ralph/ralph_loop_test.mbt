@@ -307,3 +307,246 @@ test "RalphLoop multi-wave execution" {
   // Builder should have been called 3 times (1 in wave 0 + 2 in wave 1)
   assert_true(builder_mock.get_history().length() == 3)
 }
+
+test "rework_tasks passes targeted feedback to specific task only" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login flow", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Add audit logging", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done v1")
+  builder_mock.add_response(
+    "Feedback from verifier",
+    "Done v2 REWORKED",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<needs_rework>m1-t1: fix error handling</needs_rework>",
+  )
+  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+
+  rl.run()
+
+  let history = builder_mock.get_history()
+  assert_true(history.length() == 3)
+  let (initial_task_1, _) = history[0]
+  let (initial_task_2, _) = history[1]
+  let (rework_task, _) = history[2]
+  inspect(initial_task_1, content="Implement login flow")
+  inspect(initial_task_2, content="Add audit logging")
+  assert_true(rework_task.contains("Implement login flow"))
+  assert_true(rework_task.contains("Feedback from verifier:\n- fix error handling"))
+  assert_true(not(rework_task.contains("Add audit logging")))
+  assert_true(mgr.milestones[0].tasks[0].result.unwrap().contains("REWORKED"))
+  inspect(mgr.milestones[0].tasks[1].result.unwrap(), content="Done v1")
+}
+
+test "rework_tasks resets all done tasks when feedback has no task ID (fallback)" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login flow", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Add audit logging", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done v1")
+  builder_mock.add_response(
+    "Feedback from verifier",
+    "Done v2 REWORKED",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<needs_rework>general quality issues</needs_rework>",
+  )
+  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+
+  rl.run()
+
+  let history = builder_mock.get_history()
+  assert_true(history.length() == 4)
+  let (initial_task_1, _) = history[0]
+  let (initial_task_2, _) = history[1]
+  let (rework_task_1, _) = history[2]
+  let (rework_task_2, _) = history[3]
+  inspect(initial_task_1, content="Implement login flow")
+  inspect(initial_task_2, content="Add audit logging")
+  assert_true(rework_task_1.contains("Implement login flow"))
+  assert_true(rework_task_1.contains("Feedback from verifier:\n- general quality issues"))
+  assert_true(rework_task_2.contains("Add audit logging"))
+  assert_true(rework_task_2.contains("Feedback from verifier:\n- general quality issues"))
+  assert_true(mgr.milestones[0].tasks[0].result.unwrap().contains("REWORKED"))
+  assert_true(mgr.milestones[0].tasks[1].result.unwrap().contains("REWORKED"))
+}
+
+test "rework_tasks distributes per-task feedback without cross-contamination" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login flow", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Add audit logging", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done v1")
+  builder_mock.add_response("add validation", "Done v2 REWORKED-T1")
+  builder_mock.add_response("missing edge cases", "Done v2 REWORKED-T2")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response=
+      "<needs_rework>m1-t1: add validation\nm1-t2: missing edge cases</needs_rework>",
+  )
+  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+
+  rl.run()
+
+  let history = builder_mock.get_history()
+  assert_true(history.length() == 4)
+  let (initial_task_1, _) = history[0]
+  let (initial_task_2, _) = history[1]
+  let (rework_task_1, _) = history[2]
+  let (rework_task_2, _) = history[3]
+  inspect(initial_task_1, content="Implement login flow")
+  inspect(initial_task_2, content="Add audit logging")
+  assert_true(rework_task_1.contains("Implement login flow"))
+  assert_true(rework_task_1.contains("add validation"))
+  assert_true(not(rework_task_1.contains("missing edge cases")))
+  assert_true(rework_task_2.contains("Add audit logging"))
+  assert_true(rework_task_2.contains("missing edge cases"))
+  assert_true(not(rework_task_2.contains("add validation")))
+  inspect(mgr.milestones[0].tasks[0].result.unwrap(), content="Done v2 REWORKED-T1")
+  inspect(mgr.milestones[0].tasks[1].result.unwrap(), content="Done v2 REWORKED-T2")
+}
+
+test "rework prompt has correct format with description and feedback" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "implement feature X", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done v1")
+  builder_mock.add_response(
+    "Feedback from verifier",
+    "Done v2 REWORKED",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response=
+      "<needs_rework>m1-t1: add input validation</needs_rework>",
+  )
+  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+
+  rl.run()
+
+  let history = builder_mock.get_history()
+  assert_true(history.length() == 2)
+  let (rework_task, _) = history[1]
+  let expected_prompt =
+    "implement feature X\n\nFeedback from verifier:\n- add input validation\n"
+  inspect(rework_task, content=expected_prompt)
+  inspect(mgr.milestones[0].tasks[0].result.unwrap(), content="Done v2 REWORKED")
+}
+
+test "rework_tasks matches space-delimited feedback (no colon)" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login flow", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Add audit logging", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done v1")
+  builder_mock.add_response(
+    "Feedback from verifier",
+    "Done v2 REWORKED",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response=
+      "<needs_rework>m1-t1 needs better validation</needs_rework>",
+  )
+  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+
+  rl.run()
+
+  let history = builder_mock.get_history()
+  assert_true(history.length() == 3)
+  let (initial_task_1, _) = history[0]
+  let (initial_task_2, _) = history[1]
+  let (rework_task, _) = history[2]
+  inspect(initial_task_1, content="Implement login flow")
+  inspect(initial_task_2, content="Add audit logging")
+  assert_true(rework_task.contains("Implement login flow"))
+  assert_true(
+    rework_task.contains("Feedback from verifier:\n- needs better validation"),
+  )
+  assert_true(not(rework_task.contains("Add audit logging")))
+  assert_true(mgr.milestones[0].tasks[0].result.unwrap().contains("REWORKED"))
+  inspect(mgr.milestones[0].tasks[1].result.unwrap(), content="Done v1")
+}
