@@ -1,6 +1,6 @@
 {
-  "name": "@mizchi/tornado",
-  "version": "0.4.0",
+  "name": "@ymdvsymd/tornado",
+  "version": "0.6.0",
   "description": "Multi-agent development orchestrator with TUI",
   "bin": {
     "tornado": "bin/tornado.js"
@@ -15,11 +15,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mizchi/tornado"
+    "url": "https://github.com/ymdvsymd/tornado"
   },
-  "homepage": "https://github.com/mizchi/tornado",
+  "homepage": "https://github.com/ymdvsymd/tornado",
   "bugs": {
-    "url": "https://github.com/mizchi/tornado/issues"
+    "url": "https://github.com/ymdvsymd/tornado/issues"
   },
   "keywords": [
     "moonbit",
@@ -28,7 +28,7 @@
     "tui",
     "cli"
   ],
-  "author": "mizchi",
+  "author": "ymdvsymd",
   "license": "MIT",
   "scripts": {
     "build:sdk": "tsc -p tsconfig.sdk.json"
