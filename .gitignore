@@ -4,3 +4,6 @@ bin/
 .tornado/
 target/
 node_modules/
+scheduled_tasks.lock
+settings.local.json
+.history/
