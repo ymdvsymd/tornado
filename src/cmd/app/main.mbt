@@ -33,6 +33,7 @@ fn main {
       review_interval=review_interval,
       rlm=rlm,
       ralph=ralph,
+      log_path=log_path,
       lang=cli_lang,
       warnings=warnings,
     ) => {
@@ -40,6 +41,10 @@ fn main {
         log("WARN", w)
       }
       let lang = resolve_lang(cli_lang)
+      match log_path {
+        Some(path) => set_log_file(path)
+        None => ()
+      }
       if ralph {
         run_ralph(config_path, lang, dev_kind, review_kind)
       } else {
@@ -270,6 +275,10 @@ fn log(level : String, msg : String) -> Unit {
     println("[\{ts}] [\{level}] \{msg}")
   } else {
     println("\{color}[\{ts}] [\{level}] \{msg}\u001b[0m")
+  }
+  let log_file = get_log_file()
+  if not(log_file.is_empty()) {
+    append_file_sync(log_file, "[\{ts}] [\{level}] \{msg}\n")
   }
 }
 

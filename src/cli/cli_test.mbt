@@ -9,6 +9,7 @@ test "parse_cli_args flags only" {
     Run(
       config_path=config,
       plan_path=plan,
+      log_path=_log_path,
       dev_kind=dev,
       review_kind=review,
       review_interval=ri,
@@ -36,6 +37,7 @@ test "parse_cli_args first positional file is plan" {
     Run(
       config_path=config,
       plan_path=plan,
+      log_path=_log_path,
       dev_kind=dev,
       review_kind=_review,
       review_interval=_ri,
@@ -59,6 +61,7 @@ test "parse_cli_args supports --config=value" {
     Run(
       config_path=config,
       plan_path=plan,
+      log_path=_log_path,
       dev_kind=dev,
       review_kind=review,
       review_interval=_ri,
@@ -83,6 +86,7 @@ test "parse_cli_args supports --config <value>" {
     Run(
       config_path=config,
       plan_path=plan,
+      log_path=_log_path,
       dev_kind=dev,
       review_kind=review,
       review_interval=_ri,
@@ -109,6 +113,41 @@ test "parse_cli_args validate command" {
   }
 }
 
+test "parse_cli_args --log=path" {
+  let args = ["tornado", "--log=/tmp/tornado.log"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(log_path=log_path, ..) => {
+      inspect(log_path, content="Some(\"/tmp/tornado.log\")")
+    }
+    _ => panic()
+  }
+}
+
+test "parse_cli_args --log path" {
+  let args = ["tornado", "--log", "/tmp/tornado.log"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(log_path=log_path, ..) => {
+      inspect(log_path, content="Some(\"/tmp/tornado.log\")")
+    }
+    _ => panic()
+  }
+}
+
+test "parse_cli_args --log missing value warns" {
+  let args = ["tornado", "--log"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(log_path=log_path, warnings=warnings, ..) => {
+      inspect(log_path, content="None")
+      assert_true(warnings.length() == 1)
+      assert_true(warnings[0].contains("Missing value for --log"))
+    }
+    _ => panic()
+  }
+}
+
 test "parse_cli_args warns on non-file positional argument" {
   let args = ["tornado", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
@@ -116,6 +155,7 @@ test "parse_cli_args warns on non-file positional argument" {
     Run(
       config_path=config,
       plan_path=plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=_ri,
@@ -139,6 +179,7 @@ test "parse_cli_args --review-interval=3" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=dev,
       review_kind=_review,
       review_interval=ri,
@@ -162,6 +203,7 @@ test "parse_cli_args --rlm flag" {
     Run(
       config_path=_config,
       plan_path=plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=_ri,
@@ -184,6 +226,7 @@ test "parse_cli_args --review-interval invalid warns" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=ri,
@@ -206,6 +249,7 @@ test "parse_cli_args --review-interval=0 warns" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=ri,
@@ -228,6 +272,7 @@ test "parse_cli_args --lang=ja" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=dev,
       review_kind=_review,
       review_interval=_ri,
@@ -250,6 +295,7 @@ test "parse_cli_args --lang=en" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=_ri,
@@ -271,6 +317,7 @@ test "parse_cli_args --lang=auto" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=_ri,
@@ -292,6 +339,7 @@ test "parse_cli_args --lang=invalid warns" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=_ri,
@@ -342,6 +390,7 @@ test "parse_cli_args --ralph flag" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=dev,
       review_kind=_review,
       review_interval=_ri,
@@ -365,6 +414,7 @@ test "parse_cli_args --ralph and --rlm together" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=_ri,
@@ -387,6 +437,7 @@ test "parse_cli_args ralph defaults to false" {
     Run(
       config_path=_config,
       plan_path=_plan,
+      log_path=_log_path,
       dev_kind=_dev,
       review_kind=_review,
       review_interval=_ri,

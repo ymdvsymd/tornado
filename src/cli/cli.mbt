@@ -8,6 +8,7 @@ pub(all) enum CliCommand {
     rlm~ : Bool,
     ralph~ : Bool,
     lang~ : String?,
+    log_path~ : String?,
     warnings~ : Array[String],
   )
   Validate(String?)
@@ -30,6 +31,7 @@ pub fn parse_cli_args(
       rlm=false,
       ralph=false,
       lang=None,
+      log_path=None,
       warnings=[],
     )
   }
@@ -130,6 +132,7 @@ fn parse_run_args(
   let mut rlm : Bool = false
   let mut ralph : Bool = false
   let mut lang : String? = None
+  let mut log_path : String? = None
   let warnings : Array[String] = []
 
   let mut i = 0
@@ -218,6 +221,34 @@ fn parse_run_args(
       continue
     }
 
+    if token.has_prefix("--log=") {
+      let path = token.view(start_offset="--log=".length()).to_string()
+      if path.is_empty() {
+        warnings.push("Missing value for --log")
+      } else {
+        log_path = Some(path)
+      }
+      i += 1
+      continue
+    }
+
+    if token == "--log" {
+      if i + 1 < len {
+        let path = args[i + 1]
+        if path.has_prefix("--") {
+          warnings.push("Missing value for --log")
+          i += 1
+        } else {
+          log_path = Some(path)
+          i += 2
+        }
+      } else {
+        warnings.push("Missing value for --log")
+        i += 1
+      }
+      continue
+    }
+
     if token.has_prefix("--") {
       warnings.push("Unknown option: \{token}")
       i += 1
@@ -239,7 +270,18 @@ fn parse_run_args(
     i += 1
   }
 
-  Run(config_path~, plan_path~, dev_kind~, review_kind~, review_interval~, rlm~, ralph~, lang~, warnings~)
+  Run(
+    config_path~,
+    plan_path~,
+    dev_kind~,
+    review_kind~,
+    review_interval~,
+    rlm~,
+    ralph~,
+    lang~,
+    log_path~,
+    warnings~,
+  )
 }
 
 fn parse_kind_alias(raw : String) -> @types.AgentKind? {

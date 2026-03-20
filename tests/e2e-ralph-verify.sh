@@ -19,6 +19,7 @@ fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+LOG_FILE="$TMP_DIR/tornado.log"
 
 cat >"$TMP_DIR/tornado.json" <<'EOF'
 {
@@ -76,7 +77,7 @@ cat >"$TMP_DIR/milestones.json" <<'EOF'
 EOF
 
 cd "$TMP_DIR"
-OUTPUT="$(node "$ROOT_DIR/bin/tornado.js" --ralph --config=tornado.json 2>&1)"
+OUTPUT="$(node "$ROOT_DIR/bin/tornado.js" --ralph --config=tornado.json --log="$LOG_FILE" 2>&1)"
 
 printf '%s\n' "$OUTPUT"
 
@@ -107,5 +108,19 @@ assert_contains "Milestones saved to milestones.json"
 
 assert_file_contains "$TMP_DIR/milestones.json" '"status":"done"'
 assert_file_contains "$TMP_DIR/milestones.json" '"result":"mock response"'
+
+# Log file assertions
+if [ ! -f "$LOG_FILE" ]; then
+  echo "FAIL: expected log file to exist: $LOG_FILE" >&2
+  exit 1
+fi
+
+if grep -P '\x1b\[' "$LOG_FILE" 2>/dev/null; then
+  echo "FAIL: log file contains ANSI escape codes" >&2
+  exit 1
+fi
+
+assert_file_contains "$LOG_FILE" "Milestone m1 complete"
+assert_file_contains "$LOG_FILE" "Milestones saved to milestones.json"
 
 echo "PASS: All e2e assertions passed"

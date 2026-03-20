@@ -19,6 +19,7 @@ fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+LOG_FILE="$TMP_DIR/tornado.log"
 
 cat >"$TMP_DIR/tornado.json" <<'EOF'
 {
@@ -82,7 +83,7 @@ cat >"$TMP_DIR/milestones.json" <<'EOF'
 EOF
 
 cd "$TMP_DIR"
-OUTPUT="$(node "$ROOT_DIR/bin/tornado.js" --ralph --config=tornado.json 2>&1)" || true
+OUTPUT="$(node "$ROOT_DIR/bin/tornado.js" --ralph --config=tornado.json --log="$LOG_FILE" 2>&1)" || true
 
 printf '%s\n' "$OUTPUT"
 
@@ -94,6 +95,15 @@ assert_contains() {
   fi
 }
 
+assert_file_contains() {
+  local file="$1"
+  local needle="$2"
+  if ! grep -Fq "$needle" "$file"; then
+    echo "FAIL: expected $file to contain: $needle" >&2
+    exit 1
+  fi
+}
+
 assert_contains "Verifying perspective: CodeQuality"
 assert_contains "Verifying perspective: Performance"
 assert_contains "Verifying perspective: Security"
@@ -101,5 +111,19 @@ assert_contains "Verifying perspective: GoalAlignment"
 assert_contains "Wave 0 approved"
 assert_contains "Wave 1 approved"
 assert_contains "Milestone m1 complete"
+
+# Log file assertions
+if [ ! -f "$LOG_FILE" ]; then
+  echo "FAIL: expected log file to exist: $LOG_FILE" >&2
+  exit 1
+fi
+
+if grep -P '\x1b\[' "$LOG_FILE" 2>/dev/null; then
+  echo "FAIL: log file contains ANSI escape codes" >&2
+  exit 1
+fi
+
+assert_file_contains "$LOG_FILE" "Wave 0 approved"
+assert_file_contains "$LOG_FILE" "Milestone m1 complete"
 
 echo "PASS: All live e2e assertions passed"

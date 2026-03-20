@@ -48,6 +48,40 @@ extern "js" fn js_write_file_sync(path : String, content : String) -> Unit =
   #|  fs.writeFileSync(path, content, 'utf-8');
   #|}
 
+///| Append to a file synchronously
+pub fn append_file_sync(path : String, content : String) -> Unit {
+  js_append_file_sync(path, content)
+}
+
+///|
+extern "js" fn js_append_file_sync(path : String, content : String) -> Unit =
+  #|(path, content) => {
+  #|  const fs = require('fs');
+  #|  fs.appendFileSync(path, content, 'utf-8');
+  #|}
+
+///| Set the active log file path
+pub fn set_log_file(path : String) -> Unit {
+  js_set_log_file(path)
+}
+
+///|
+extern "js" fn js_set_log_file(path : String) -> Unit =
+  #|(path) => {
+  #|  globalThis.__tornado_log_file = path;
+  #|}
+
+///| Get the active log file path
+pub fn get_log_file() -> String {
+  js_get_log_file()
+}
+
+///|
+extern "js" fn js_get_log_file() -> String =
+  #|() => {
+  #|  return globalThis.__tornado_log_file || "";
+  #|}
+
 ///| Execute a shell command synchronously, return stdout
 pub fn exec_sync(command : String) -> String {
   js_exec_sync(command)
