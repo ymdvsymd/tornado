@@ -3,6 +3,7 @@
     "mizchi/tornado/types",
     "mizchi/tornado/agent",
     "mizchi/tornado/config",
+    "mizchi/tornado/prompts",
     "moonbitlang/core/json"
   ]
 }
