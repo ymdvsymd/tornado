@@ -1,9 +1,11 @@
+///|
 test "VerifierAgent::parse_verdict approved" {
   let v = @ralph.VerifierAgent::new()
   let verdict = v.parse_verdict("All looks good. <wave_approved>")
   inspect(verdict, content="Approved")
 }
 
+///|
 test "VerifierAgent::parse_verdict needs_rework" {
   let v = @ralph.VerifierAgent::new()
   let verdict = v.parse_verdict(
@@ -19,6 +21,7 @@ test "VerifierAgent::parse_verdict needs_rework" {
   }
 }
 
+///|
 test "VerifierAgent::parse_verdict milestone_failed" {
   let v = @ralph.VerifierAgent::new()
   let verdict = v.parse_verdict(
@@ -30,12 +33,14 @@ test "VerifierAgent::parse_verdict milestone_failed" {
   }
 }
 
+///|
 test "VerifierAgent::parse_verdict defaults to approved" {
   let v = @ralph.VerifierAgent::new()
   let verdict = v.parse_verdict("Everything looks fine")
   inspect(verdict, content="Approved")
 }
 
+///|
 test "VerifierAgent::build_verify_prompt includes milestone and results" {
   let v = @ralph.VerifierAgent::new()
   let milestone : @types.Milestone = {
@@ -53,6 +58,7 @@ test "VerifierAgent::build_verify_prompt includes milestone and results" {
   assert_true(prompt.contains("wave_approved"))
 }
 
+///|
 test "VerifierAgent::verify with mock backend approved" {
   let v = @ralph.VerifierAgent::new()
   let mock = @agent.MockBackend::new(
@@ -70,6 +76,7 @@ test "VerifierAgent::verify with mock backend approved" {
   inspect(verdict, content="Approved")
 }
 
+///|
 test "VerifierAgent::verify with mock backend needs_rework" {
   let v = @ralph.VerifierAgent::new()
   let mock = @agent.MockBackend::new(

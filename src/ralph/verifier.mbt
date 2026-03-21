@@ -1,18 +1,21 @@
-///| Verifier agent for the ralph loop
+///|
+/// Verifier agent for the ralph loop
 pub struct VerifierAgent {
   agent_id : String
   lang : String
 }
 
-///| Create a new verifier agent
+///|
+/// Create a new verifier agent
 pub fn VerifierAgent::new(
-  agent_id~ : String = "verifier",
-  lang~ : String = "en",
+  agent_id? : String = "verifier",
+  lang? : String = "en",
 ) -> VerifierAgent {
   { agent_id, lang }
 }
 
-///| Build the verification prompt
+///|
+/// Build the verification prompt
 pub fn VerifierAgent::build_verify_prompt(
   self : VerifierAgent,
   milestone : @types.Milestone,
@@ -63,7 +66,8 @@ pub fn VerifierAgent::build_verify_prompt(
   buf.to_string()
 }
 
-///| Parse verifier output into a verdict
+///|
+/// Parse verifier output into a verdict
 pub fn VerifierAgent::parse_verdict(
   _self : VerifierAgent,
   output : String,
@@ -87,7 +91,8 @@ pub fn VerifierAgent::parse_verdict(
   Approved
 }
 
-///| Run the verifier agent
+///|
+/// Run the verifier agent
 pub fn VerifierAgent::verify(
   self : VerifierAgent,
   milestone : @types.Milestone,
@@ -95,7 +100,7 @@ pub fn VerifierAgent::verify(
   wave_results : Array[(String, String)],
   backend : @agent.BoxedBackend,
   project_context : String,
-  on_event~ : (@types.AgentEvent) -> Unit = fn(_e) {  },
+  on_event? : (@types.AgentEvent) -> Unit = fn(_e) {  },
 ) -> @types.VerifierVerdict {
   let prompt = self.build_verify_prompt(
     milestone, wave, wave_results, project_context,
@@ -110,7 +115,8 @@ pub fn VerifierAgent::verify(
 
 // --- Internal helpers ---
 
-///| Extract content between <tag> and </tag>
+///|
+/// Extract content between <tag> and </tag>
 fn extract_tag(s : String, tag : String) -> String {
   let open = "<" + tag + ">"
   let close = "</" + tag + ">"
@@ -127,7 +133,8 @@ fn extract_tag(s : String, tag : String) -> String {
   trim(substring(s, start, close_idx))
 }
 
-///| Split rework items by newline
+///|
+/// Split rework items by newline
 fn split_rework_items(s : String) -> Array[String] {
   let items : Array[String] = []
   let lines = split_lines(s)
@@ -143,6 +150,7 @@ fn split_rework_items(s : String) -> Array[String] {
   items
 }
 
+///|
 fn find_substring(haystack : String, needle : String) -> Int {
   let h = haystack.to_array()
   let n = needle.to_array()
@@ -164,6 +172,7 @@ fn find_substring(haystack : String, needle : String) -> Int {
   -1
 }
 
+///|
 fn find_substring_from(haystack : String, needle : String, from : Int) -> Int {
   let h = haystack.to_array()
   let n = needle.to_array()
@@ -185,6 +194,7 @@ fn find_substring_from(haystack : String, needle : String, from : Int) -> Int {
   -1
 }
 
+///|
 fn substring(s : String, start : Int, end : Int) -> String {
   let chars = s.to_array()
   let actual_start = if start < 0 { 0 } else { start }

@@ -1,4 +1,5 @@
-///| Main ralph loop state machine
+///|
+/// Main ralph loop state machine
 pub struct RalphLoop {
   config : @config.ProjectConfig
   milestone_manager : MilestoneManager
@@ -10,13 +11,14 @@ pub struct RalphLoop {
   max_rework_attempts : Int
 }
 
-///| Create a new ralph loop
+///|
+/// Create a new ralph loop
 pub fn RalphLoop::new(
   config : @config.ProjectConfig,
   milestone_manager : MilestoneManager,
   backends : Map[String, @agent.BoxedBackend],
   callbacks : @types.OrchestratorCallbacks,
-  lang~ : String = "en",
+  lang? : String = "en",
 ) -> RalphLoop {
   let planner_id = find_agent_id(config, @types.AgentRole::Planner)
   let verifier_id = find_agent_id(config, @types.AgentRole::Verifier)
@@ -40,7 +42,8 @@ pub fn RalphLoop::new(
   }
 }
 
-///| Run the ralph loop to completion
+///|
+/// Run the ralph loop to completion
 pub fn RalphLoop::run(self : RalphLoop) -> Unit {
   self.current_phase = LoadingMilestones
   emit_info(self, "Ralph loop started")
@@ -63,7 +66,8 @@ pub fn RalphLoop::run(self : RalphLoop) -> Unit {
   }
 }
 
-///| Run a single milestone through planning, execution, and verification
+///|
+/// Run a single milestone through planning, execution, and verification
 fn RalphLoop::run_milestone(
   self : RalphLoop,
   milestone : @types.Milestone,
@@ -74,9 +78,7 @@ fn RalphLoop::run_milestone(
       Some(planner) => {
         self.current_phase = Planning(milestone.id)
         emit_info(self, "Planning milestone: \{milestone.id}")
-        let planner_backend = find_backend(
-          self.backends, planner.agent_id,
-        )
+        let planner_backend = find_backend(self.backends, planner.agent_id)
         match planner_backend {
           Some(backend) => {
             let tasks = planner.plan(
@@ -100,9 +102,7 @@ fn RalphLoop::run_milestone(
           }
         }
       }
-      None => {
-        emit_info(self, "No planner configured, skipping planning")
-      }
+      None => emit_info(self, "No planner configured, skipping planning")
     }
   }
   // Execute waves
@@ -126,7 +126,8 @@ fn RalphLoop::run_milestone(
   true
 }
 
-///| Run a single wave: execute tasks, then verify
+///|
+/// Run a single wave: execute tasks, then verify
 fn RalphLoop::run_wave(
   self : RalphLoop,
   milestone : @types.Milestone,
@@ -152,9 +153,9 @@ fn RalphLoop::run_wave(
       for task in tasks {
         task.status = InProgress(bid)
         emit_info(self, "Running task \{task.id}: \{task.description}")
-        let result = backend.run(
-          task.description, "", fn(e) { handle_event(self, bid, e) },
-        )
+        let result = backend.run(task.description, "", fn(e) {
+          handle_event(self, bid, e)
+        })
         match result.status {
           Completed => {
             task.status = Done
@@ -176,7 +177,8 @@ fn RalphLoop::run_wave(
   self.verify_wave(milestone, wave, wave_results, 0)
 }
 
-///| Verify a wave with rework loop
+///|
+/// Verify a wave with rework loop
 fn RalphLoop::verify_wave(
   self : RalphLoop,
   milestone : @types.Milestone,
@@ -185,19 +187,16 @@ fn RalphLoop::verify_wave(
   attempt : Int,
 ) -> Bool {
   match self.verifier {
-    None => {
+    None =>
       // No verifier configured, auto-approve
       true
-    }
     Some(verifier) => {
       self.current_phase = Verifying(milestone.id, wave)
       emit_info(
         self,
         "Verifying wave \{wave} of \{milestone.id} (attempt \{attempt + 1})",
       )
-      let verifier_backend = find_backend(
-        self.backends, verifier.agent_id,
-      )
+      let verifier_backend = find_backend(self.backends, verifier.agent_id)
       match verifier_backend {
         None => {
           emit_info(self, "No verifier backend found, auto-approving")
@@ -246,7 +245,8 @@ fn RalphLoop::verify_wave(
   }
 }
 
-///| Re-execute tasks that need rework
+///|
+/// Re-execute tasks that need rework
 fn RalphLoop::rework_tasks(
   self : RalphLoop,
   milestone : @types.Milestone,
@@ -269,9 +269,9 @@ fn RalphLoop::rework_tasks(
           Failed(_) | Pending => {
             task.status = InProgress(bid)
             let rework_prompt = "Rework: " + task.description
-            let result = backend.run(
-              rework_prompt, "", fn(e) { handle_event(self, bid, e) },
-            )
+            let result = backend.run(rework_prompt, "", fn(e) {
+              handle_event(self, bid, e)
+            })
             match result.status {
               Completed => {
                 task.status = Done
@@ -294,6 +294,7 @@ fn RalphLoop::rework_tasks(
 
 // --- Internal helpers ---
 
+///|
 fn find_agent_id(
   config : @config.ProjectConfig,
   role : @types.AgentRole,
@@ -306,6 +307,7 @@ fn find_agent_id(
   None
 }
 
+///|
 fn find_backend(
   backends : Map[String, @agent.BoxedBackend],
   id : String,
@@ -313,6 +315,7 @@ fn find_backend(
   backends.get(id)
 }
 
+///|
 fn collect_wave_results(
   tasks : Array[@types.RalphTask],
 ) -> Array[(String, String)] {
@@ -327,6 +330,7 @@ fn collect_wave_results(
   results
 }
 
+///|
 fn handle_event(
   rl : RalphLoop,
   agent_id : String,
@@ -339,6 +343,7 @@ fn handle_event(
   }
 }
 
+///|
 fn emit_info(rl : RalphLoop, msg : String) -> Unit {
   (rl.callbacks.on_info)(msg)
 }

@@ -1,6 +1,5 @@
-fn make_ralph_config(
-  ralph_enabled~ : Bool = true,
-) -> @config.ProjectConfig {
+///|
+fn make_ralph_config(ralph_enabled? : Bool = true) -> @config.ProjectConfig {
   let planner_agent : @types.AgentConfig = {
     id: "planner",
     kind: Mock,
@@ -41,6 +40,7 @@ fn make_ralph_config(
   }
 }
 
+///|
 test "RalphLoop full cycle with single milestone" {
   let config = make_ralph_config()
   let json =
@@ -80,6 +80,7 @@ test "RalphLoop full cycle with single milestone" {
   inspect(rl.current_phase, content="AllComplete")
 }
 
+///|
 test "RalphLoop with pre-planned tasks" {
   let config = make_ralph_config()
   let json =
@@ -95,9 +96,7 @@ test "RalphLoop with pre-planned tasks" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
-  let builder_mock = @agent.MockBackend::new(
-    default_response="Schema created",
-  )
+  let builder_mock = @agent.MockBackend::new(default_response="Schema created")
   let verifier_mock = @agent.MockBackend::new(
     default_response="<wave_approved>",
   )
@@ -113,6 +112,7 @@ test "RalphLoop with pre-planned tasks" {
   assert_true(planner_mock.get_history().is_empty())
 }
 
+///|
 test "RalphLoop with rework cycle" {
   let config = make_ralph_config()
   let json =
@@ -125,9 +125,7 @@ test "RalphLoop with rework cycle" {
   let planner_mock = @agent.MockBackend::new(
     default_response="WAVE 0:\n1. Create schema",
   )
-  let builder_mock = @agent.MockBackend::new(
-    default_response="Done",
-  )
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
   // First call needs rework, second approves
   let verifier_mock = @agent.MockBackend::new(
     default_response="<needs_rework>m1-t1: add validation</needs_rework>",
@@ -149,12 +147,13 @@ test "RalphLoop with rework cycle" {
   assert_true(infos.iter().any(fn(m) { m.contains("Rework needed") }))
   // Eventually reaches max rework and accepts
   assert_true(
-    infos.iter().any(fn(m) {
-      m.contains("Max rework attempts") || m.contains("complete")
-    }),
+    infos
+    .iter()
+    .any(fn(m) { m.contains("Max rework attempts") || m.contains("complete") }),
   )
 }
 
+///|
 test "RalphLoop milestone failure" {
   let config = make_ralph_config()
   let json =
@@ -185,6 +184,7 @@ test "RalphLoop milestone failure" {
   assert_true(infos.iter().any(fn(m) { m.contains("failed") }))
 }
 
+///|
 test "RalphLoop without verifier auto-approves" {
   let builder_agent : @types.AgentConfig = {
     id: "builder",
@@ -238,6 +238,7 @@ test "RalphLoop without verifier auto-approves" {
   inspect(mgr.milestones[0].status, content="Done")
 }
 
+///|
 test "RalphLoop multiple milestones" {
   let config = make_ralph_config()
   let json =
@@ -275,6 +276,7 @@ test "RalphLoop multiple milestones" {
   inspect(rl.current_phase, content="AllComplete")
 }
 
+///|
 test "RalphLoop multi-wave execution" {
   let config = make_ralph_config()
   let json =

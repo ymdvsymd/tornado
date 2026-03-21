@@ -1,15 +1,18 @@
-///| Manages milestones and their tasks for the ralph loop
+///|
+/// Manages milestones and their tasks for the ralph loop
 pub struct MilestoneManager {
   milestones : Array[@types.Milestone]
   mut next_task_id : Int
 }
 
-///| Create an empty milestone manager
+///|
+/// Create an empty milestone manager
 pub fn MilestoneManager::new() -> MilestoneManager {
   { milestones: [], next_task_id: 1 }
 }
 
-///| Load milestones from JSON string
+///|
+/// Load milestones from JSON string
 pub fn MilestoneManager::load_from_json(
   s : String,
 ) -> MilestoneManager raise Failure {
@@ -39,7 +42,8 @@ pub fn MilestoneManager::load_from_json(
   { milestones, next_task_id: max_id + 1 }
 }
 
-///| Serialize milestones to JSON string
+///|
+/// Serialize milestones to JSON string
 pub fn MilestoneManager::to_json(self : MilestoneManager) -> String {
   let parts : Array[String] = []
   for m in self.milestones {
@@ -48,19 +52,22 @@ pub fn MilestoneManager::to_json(self : MilestoneManager) -> String {
   "{\"milestones\":[" + join_strings(parts, ",") + "]}"
 }
 
-///| Get the next pending milestone
+///|
+/// Get the next pending milestone
 pub fn MilestoneManager::next_pending_milestone(
   self : MilestoneManager,
 ) -> @types.Milestone? {
   for m in self.milestones {
-    if m.status == @types.MilestoneStatus::Pending || m.status == @types.MilestoneStatus::InProgress {
+    if m.status == @types.MilestoneStatus::Pending ||
+      m.status == @types.MilestoneStatus::InProgress {
       return Some(m)
     }
   }
   None
 }
 
-///| Get all tasks in a specific wave
+///|
+/// Get all tasks in a specific wave
 pub fn MilestoneManager::get_wave_tasks(
   _self : MilestoneManager,
   milestone : @types.Milestone,
@@ -75,12 +82,15 @@ pub fn MilestoneManager::get_wave_tasks(
   result
 }
 
-///| Check if milestone has undone tasks
+///|
+/// Check if milestone has undone tasks
 pub fn MilestoneManager::has_undone_tasks(
   _self : MilestoneManager,
   milestone : @types.Milestone,
 ) -> Bool {
-  milestone.tasks.iter().any(fn(t) {
+  milestone.tasks
+  .iter()
+  .any(fn(t) {
     match t.status {
       Pending | InProgress(_) => true
       _ => false
@@ -88,7 +98,8 @@ pub fn MilestoneManager::has_undone_tasks(
   })
 }
 
-///| Get the next wave number that has pending tasks
+///|
+/// Get the next wave number that has pending tasks
 pub fn MilestoneManager::next_wave_number(
   _self : MilestoneManager,
   milestone : @types.Milestone,
@@ -107,16 +118,19 @@ pub fn MilestoneManager::next_wave_number(
   min_wave
 }
 
-///| Check if all milestones are done
-pub fn MilestoneManager::all_milestones_done(
-  self : MilestoneManager,
-) -> Bool {
-  self.milestones.iter().all(fn(m) {
-    m.status == @types.MilestoneStatus::Done || m.status is @types.MilestoneStatus::Failed(_)
+///|
+/// Check if all milestones are done
+pub fn MilestoneManager::all_milestones_done(self : MilestoneManager) -> Bool {
+  self.milestones
+  .iter()
+  .all(fn(m) {
+    m.status == @types.MilestoneStatus::Done ||
+    m.status is @types.MilestoneStatus::Failed(_)
   })
 }
 
-///| Generate a unique task id
+///|
+/// Generate a unique task id
 pub fn MilestoneManager::gen_task_id(
   self : MilestoneManager,
   milestone_id : String,
@@ -126,7 +140,56 @@ pub fn MilestoneManager::gen_task_id(
   id
 }
 
-///| Parse planner output into tasks
+///|
+/// Parse milestone design output in "MILESTONE <id>: <goal>" format
+pub fn MilestoneManager::parse_milestone_design(
+  _self : MilestoneManager,
+  output : String,
+) -> Array[@types.Milestone] {
+  let milestones : Array[@types.Milestone] = []
+  let lines = split_lines(output)
+  for line in lines {
+    let trimmed = trim(line)
+    if trimmed.is_empty() {
+      continue
+    }
+    // Check for "MILESTONE <id>: <goal>" format
+    if trimmed.has_prefix("MILESTONE ") {
+      let chars = trimmed.to_array()
+      let rest = String::from_array(chars[10:]) // after "MILESTONE "
+      let colon_idx = find_char(rest, ':')
+      if colon_idx >= 0 {
+        let rest_chars = rest.to_array()
+        let id = trim(String::from_array(rest_chars[:colon_idx]))
+        let goal = trim(String::from_array(rest_chars[colon_idx + 1:]))
+        if not(id.is_empty()) && not(goal.is_empty()) {
+          milestones.push({
+            id,
+            goal,
+            status: @types.MilestoneStatus::Pending,
+            tasks: [],
+            current_wave: 0,
+          })
+        }
+      }
+    }
+  }
+  milestones
+}
+
+///|
+/// Add parsed milestones to the manager
+pub fn MilestoneManager::add_milestones(
+  self : MilestoneManager,
+  new_milestones : Array[@types.Milestone],
+) -> Unit {
+  for m in new_milestones {
+    self.milestones.push(m)
+  }
+}
+
+///|
+/// Parse planner output into tasks
 pub fn MilestoneManager::parse_planner_output(
   self : MilestoneManager,
   output : String,
@@ -137,6 +200,7 @@ pub fn MilestoneManager::parse_planner_output(
 
 // --- Internal helpers ---
 
+///|
 fn parse_milestone(json : Json) -> @types.Milestone {
   let id = get_str(json, "id", "")
   let goal = get_str(json, "goal", "")
@@ -163,6 +227,7 @@ fn parse_milestone(json : Json) -> @types.Milestone {
   { id, goal, status, tasks, current_wave }
 }
 
+///|
 fn parse_ralph_task(json : Json) -> @types.RalphTask {
   let id = get_str(json, "id", "")
   let description = get_str(json, "description", "")
@@ -193,6 +258,7 @@ fn parse_ralph_task(json : Json) -> @types.RalphTask {
   { id, description, wave, status, result, plan_doc }
 }
 
+///|
 fn milestone_to_json(m : @types.Milestone) -> String {
   let status_str = match m.status {
     Pending => "pending"
@@ -218,6 +284,7 @@ fn milestone_to_json(m : @types.Milestone) -> String {
   "}"
 }
 
+///|
 fn ralph_task_to_json(t : @types.RalphTask) -> String {
   let status_str = match t.status {
     Pending => "pending"
@@ -248,6 +315,7 @@ fn ralph_task_to_json(t : @types.RalphTask) -> String {
   "}"
 }
 
+///|
 fn join_strings(parts : Array[String], sep : String) -> String {
   let buf = StringBuilder::new()
   for i, part in parts {
@@ -259,6 +327,7 @@ fn join_strings(parts : Array[String], sep : String) -> String {
   buf.to_string()
 }
 
+///|
 fn json_escape(s : String) -> String {
   let buf = StringBuilder::new()
   buf.write_char('"')
@@ -275,6 +344,7 @@ fn json_escape(s : String) -> String {
   buf.to_string()
 }
 
+///|
 fn get_str(json : Json, key : String, default : String) -> String {
   match json {
     Object(map) =>
@@ -286,6 +356,7 @@ fn get_str(json : Json, key : String, default : String) -> String {
   }
 }
 
+///|
 fn get_num(json : Json, key : String, default : Int) -> Int {
   match json {
     Object(map) =>
@@ -297,6 +368,18 @@ fn get_num(json : Json, key : String, default : Int) -> Int {
   }
 }
 
+///|
+fn find_char(s : String, ch : Char) -> Int {
+  let chars = s.to_array()
+  for i = 0; i < chars.length(); i = i + 1 {
+    if chars[i] == ch {
+      return i
+    }
+  }
+  -1
+}
+
+///|
 fn extract_task_num(id : String) -> Int {
   // Extract number after last 't' in id like "m1-t3"
   let chars = id.to_array()
@@ -321,7 +404,8 @@ fn extract_task_num(id : String) -> Int {
   num
 }
 
-///| Parse planner text output in WAVE format
+///|
+/// Parse planner text output in WAVE format
 fn parse_plan_text(
   mgr : MilestoneManager,
   output : String,
@@ -347,21 +431,20 @@ fn parse_plan_text(
     let desc = parse_list_item(trimmed)
     if desc.length() > 0 {
       let id = mgr.gen_task_id(milestone_id)
-      tasks.push(
-        {
-          id,
-          description: desc,
-          wave: current_wave,
-          status: @types.TaskStatus::Pending,
-          result: None,
-          plan_doc: None,
-        },
-      )
+      tasks.push({
+        id,
+        description: desc,
+        wave: current_wave,
+        status: @types.TaskStatus::Pending,
+        result: None,
+        plan_doc: None,
+      })
     }
   }
   tasks
 }
 
+///|
 fn split_lines(s : String) -> Array[String] {
   let lines : Array[String] = []
   let buf = StringBuilder::new()
@@ -382,6 +465,7 @@ fn split_lines(s : String) -> Array[String] {
   lines
 }
 
+///|
 fn trim(s : String) -> String {
   let chars = s.to_array()
   let len = chars.length()
@@ -399,10 +483,12 @@ fn trim(s : String) -> String {
   String::from_array(chars[start:end])
 }
 
+///|
 fn has_wave_prefix(s : String) -> Bool {
   s.has_prefix("WAVE ") || s.has_prefix("wave ") || s.has_prefix("Wave ")
 }
 
+///|
 fn parse_wave_number(s : String) -> Int {
   // Extract number after "WAVE "
   let chars = s.to_array()
@@ -419,9 +505,14 @@ fn parse_wave_number(s : String) -> Int {
     }
     i += 1
   }
-  if found { num } else { -1 }
+  if found {
+    num
+  } else {
+    -1
+  }
 }
 
+///|
 fn parse_list_item(s : String) -> String {
   let chars = s.to_array()
   let len = chars.length()

@@ -1,29 +1,34 @@
-///| Review perspective
+///|
+/// Review perspective
 pub(all) enum ReviewPerspective {
   CodeQuality
   Performance
   Security
 } derive(Eq, Show)
 
-///| ReviewAgent parses review verdicts from LLM output
+///|
+/// ReviewAgent parses review verdicts from LLM output
 pub struct ReviewAgent {
   reviewer_id : String
   lang : String
 }
 
-///| Create a new ReviewAgent
+///|
+/// Create a new ReviewAgent
 pub fn ReviewAgent::new(reviewer_id : String, lang : String) -> ReviewAgent {
   { reviewer_id, lang }
 }
 
-///| All review perspectives in order
+///|
+/// All review perspectives in order
 pub fn ReviewAgent::perspectives(
   _self : ReviewAgent,
 ) -> Array[ReviewPerspective] {
   [CodeQuality, Performance, Security]
 }
 
-///| Build review prompt for a specific perspective
+///|
+/// Build review prompt for a specific perspective
 pub fn ReviewAgent::build_prompt(
   self : ReviewAgent,
   perspective : ReviewPerspective,
@@ -33,7 +38,9 @@ pub fn ReviewAgent::build_prompt(
 ) -> String {
   let buf = StringBuilder::new()
   if self.lang == "ja" {
-    buf.write_string("以下の開発作業をレビューしてください。\n\n")
+    buf.write_string(
+      "以下の開発作業をレビューしてください。\n\n",
+    )
   } else {
     buf.write_string("Review the following development work.\n\n")
   }
@@ -71,12 +78,16 @@ pub fn ReviewAgent::build_prompt(
         buf.write_string("- エラーハンドリングの網羅性\n")
         buf.write_string("- テストカバレッジと正確性\n")
         buf.write_string("- コードの重複と不必要な複雑さ\n")
-        buf.write_string("- API 設計と公開インターフェースの明確さ\n")
+        buf.write_string(
+          "- API 設計と公開インターフェースの明確さ\n",
+        )
       }
       Performance => {
         buf.write_string("## レビュー観点: パフォーマンス\n")
         buf.write_string("以下の観点で評価してください:\n")
-        buf.write_string("- アルゴリズムの計算量（時間・空間）\n")
+        buf.write_string(
+          "- アルゴリズムの計算量（時間・空間）\n",
+        )
         buf.write_string("- 不要なメモリ確保やコピー\n")
         buf.write_string("- N+1 クエリや冗長な I/O\n")
         buf.write_string("- キャッシュの活用機会\n")
@@ -85,10 +96,16 @@ pub fn ReviewAgent::build_prompt(
       Security => {
         buf.write_string("## レビュー観点: セキュリティ\n")
         buf.write_string("以下の観点で評価してください:\n")
-        buf.write_string("- 入力値のバリデーションとサニタイズ\n")
-        buf.write_string("- インジェクション脆弱性（コマンド、SQL、XSS）\n")
+        buf.write_string(
+          "- 入力値のバリデーションとサニタイズ\n",
+        )
+        buf.write_string(
+          "- インジェクション脆弱性（コマンド、SQL、XSS）\n",
+        )
         buf.write_string("- 認証・認可の不備\n")
-        buf.write_string("- 機密データの露出（シークレット、トークン、個人情報）\n")
+        buf.write_string(
+          "- 機密データの露出（シークレット、トークン、個人情報）\n",
+        )
         buf.write_string("- 依存関係の安全性\n")
       }
     }
@@ -128,10 +145,14 @@ pub fn ReviewAgent::build_prompt(
   buf.write_string("\n\n")
   if self.lang == "ja" {
     buf.write_string("## 重要な指示\n")
-    buf.write_string("あなたの仕事は問題点を特定し TODO リストとして書き出すことです。タスクの解決は行わないでください。\n\n")
+    buf.write_string(
+      "あなたの仕事は問題点を特定し TODO リストとして書き出すことです。タスクの解決は行わないでください。\n\n",
+    )
   } else {
     buf.write_string("## Important\n")
-    buf.write_string("Your job is to identify issues and write them as a TODO list — do NOT attempt to fix or resolve the issues yourself.\n\n")
+    buf.write_string(
+      "Your job is to identify issues and write them as a TODO list — do NOT attempt to fix or resolve the issues yourself.\n\n",
+    )
   }
   if self.lang == "ja" {
     buf.write_string("## 指示\n")
@@ -152,14 +173,17 @@ pub fn ReviewAgent::build_prompt(
     "- <rejected>reason</rejected> if the work has critical issues\n\n",
   )
   if self.lang == "ja" {
-    buf.write_string("その後、発見事項の簡潔な要約を記述してください。\n")
+    buf.write_string(
+      "その後、発見事項の簡潔な要約を記述してください。\n",
+    )
   } else {
     buf.write_string("Then provide a brief summary of your findings.\n")
   }
   buf.to_string()
 }
 
-///| Parse review verdict from LLM output
+///|
+/// Parse review verdict from LLM output
 pub fn ReviewAgent::parse_verdict(
   _self : ReviewAgent,
   output : String,
@@ -192,17 +216,23 @@ pub fn ReviewAgent::parse_verdict(
   @types.ReviewVerdict::Approved
 }
 
-///| Run a single-perspective review on a completed task
+///|
+/// Run a single-perspective review on a completed task
 pub fn ReviewAgent::review_perspective(
   self : ReviewAgent,
   perspective : ReviewPerspective,
   task : @types.Task,
   backend : @agent.BoxedBackend,
   context : String,
-  on_event~ : (@types.AgentEvent) -> Unit = fn(_) {  },
+  on_event? : (@types.AgentEvent) -> Unit = fn(_) {  },
 ) -> @types.ReviewResult {
   let task_output = task.result.unwrap_or("")
-  let prompt = self.build_prompt(perspective, task.description, task_output, context)
+  let prompt = self.build_prompt(
+    perspective,
+    task.description,
+    task_output,
+    context,
+  )
   let system = if self.lang == "ja" {
     "あなたは \{perspective} に焦点を当てたコードレビュアーです。簡潔かつ具体的に指摘してください。問題の修正は行わず、TODO リストとして書き出してください。"
   } else {
@@ -224,13 +254,14 @@ pub fn ReviewAgent::review_perspective(
   result
 }
 
-///| Run all three perspectives in order, return merged result
+///|
+/// Run all three perspectives in order, return merged result
 pub fn ReviewAgent::review(
   self : ReviewAgent,
   task : @types.Task,
   backend : @agent.BoxedBackend,
-  context~ : String = "",
-  on_event~ : (@types.AgentEvent) -> Unit = fn(_) {  },
+  context? : String = "",
+  on_event? : (@types.AgentEvent) -> Unit = fn(_) {  },
 ) -> @types.ReviewResult {
   let all_items : Array[String] = []
   let summaries = StringBuilder::new()
@@ -238,7 +269,11 @@ pub fn ReviewAgent::review(
   let perspectives = self.perspectives()
   for perspective in perspectives {
     let result = self.review_perspective(
-      perspective, task, backend, context, on_event=on_event,
+      perspective,
+      task,
+      backend,
+      context,
+      on_event~,
     )
     summaries.write_string("### \{perspective}\n")
     summaries.write_string(result.summary)
@@ -275,7 +310,8 @@ pub fn ReviewAgent::review(
   merged
 }
 
-///| Build review file content as markdown
+///|
+/// Build review file content as markdown
 pub fn ReviewAgent::format_review(
   _self : ReviewAgent,
   task : @types.Task,
@@ -303,8 +339,11 @@ pub fn ReviewAgent::format_review(
 }
 
 ///| Extract content between XML-style tags.
+
 ///| Searches for the close tag starting from after the open tag,
-///| preventing cross-tag mismatches when close tag appears before open tag.
+
+///|
+/// preventing cross-tag mismatches when close tag appears before open tag.
 fn extract_tag_content(text : String, tag_name : String) -> String? {
   let open_tag = "<\{tag_name}>"
   let close_tag = "</\{tag_name}>"
@@ -313,19 +352,17 @@ fn extract_tag_content(text : String, tag_name : String) -> String? {
     Some(start) => {
       let content_start = start + open_tag.length()
       // Search for close tag only in the text after the open tag
-      let remaining = text
-        .view(start_offset=content_start)
-        .to_string()
+      let remaining = text.view(start_offset=content_start).to_string()
       let close_idx = remaining.find(close_tag)
       match close_idx {
         Some(rel_end) =>
           Some(
             text
-              .view(
-                start_offset=content_start,
-                end_offset=content_start + rel_end,
-              )
-              .to_string(),
+            .view(
+              start_offset=content_start,
+              end_offset=content_start + rel_end,
+            )
+            .to_string(),
           )
         None => None
       }
