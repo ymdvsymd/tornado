@@ -6,11 +6,11 @@
 
 ```json
 {
-  "brief": "plan から skill が抽出した goals と constraints",
+  "brief": "Full content of informational sections (Context, Target Files, Design Decisions, etc.) + intro text between # and first ##, translated to English",
   "milestones": [
     {
       "id": "m1",
-      "goal": "## 見出しから抽出した goal の英語文",
+      "goal": "Implementation Steps\n\n### Step 1: Add perspectives parameter\n\n**File:** src/ralph/verifier.mbt:131-162\n\n```mbt\npub fn VerifierAgent::verify(...)\n```\n\n### Step 2: ...",
       "status": "pending",
       "summary": "",
       "tasks": []
@@ -23,7 +23,7 @@
 
 | フィールド    | 型     | 説明 |
 | ------------- | ------ | ---- |
-| `brief`       | string | plan の goals と constraints を skill が抽出した要約 |
+| `brief`       | string | plan の情報セクション（背景・文脈、対象ファイル一覧、設計判断、問題分析、結論等）の全文 + H1〜最初の ## 間のテキストを英訳したもの。plan の背景情報を漏れなく保持する |
 | `milestones`  | array  | milestone 配列 |
 
 ### milestone
@@ -31,7 +31,7 @@
 | フィールド | 型     | 説明 |
 | ---------- | ------ | ---- |
 | `id`       | string | `m{連番}` 形式（例: `m1`, `m2`） |
-| `goal`     | string | `## 見出し` テキストを英訳した milestone goal |
+| `goal`     | string | `##` 見出しテキスト＋配下の本文全体を英訳した milestone goal。実装詳細（ファイルパス・行番号・コード例・手順）をすべて含む |
 | `status`   | string | 初期値は `"pending"` |
 | `summary`  | string | milestone 完了時に runtime が生成する要約。初期値は `""` |
 | `tasks`    | array  | 初期値は `[]` |
@@ -39,6 +39,8 @@
 ## 注記
 
 - skill は `milestones.json` を直接生成する。skeleton ファイルや後段の注入ステップは使わない
-- `brief` は Builder / Planner に渡す背景情報であり、実装詳細の全文コピーではなく短い要約にする
+- `brief` は情報セクションの全文を保持する。要約や切り詰めは行わない
+- `goal` はマイルストーン対象セクションの見出し＋本文全体を保持する。要約や切り詰めは行わない
+- plan と milestones.json の情報量は完全に一致させる
 - `summary` は各 milestone 完了後に runtime が書き戻し、次の Planner 実行時の背景情報として使われる
 - タスクはランタイムの Planner エージェントが自動生成します。
