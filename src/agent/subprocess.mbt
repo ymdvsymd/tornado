@@ -1,11 +1,13 @@
-///| SubprocessBackend runs claude-code or codex as subprocess
+///|
+/// SubprocessBackend runs claude-code or codex as subprocess
 pub struct SubprocessBackend {
   kind : @types.AgentKind
   model : String
   mut session_id : String
 }
 
-///| Create a new SubprocessBackend
+///|
+/// Create a new SubprocessBackend
 pub fn SubprocessBackend::new(
   kind : @types.AgentKind,
   model? : String = "",
@@ -13,14 +15,14 @@ pub fn SubprocessBackend::new(
   { kind, model, session_id: "" }
 }
 
-///| Get the current session id (set after first run)
-pub fn SubprocessBackend::get_session_id(
-  self : SubprocessBackend,
-) -> String {
+///|
+/// Get the current session id (set after first run)
+pub fn SubprocessBackend::get_session_id(self : SubprocessBackend) -> String {
   self.session_id
 }
 
-///| Set session id for resume
+///|
+/// Set session id for resume
 pub fn SubprocessBackend::set_session_id(
   self : SubprocessBackend,
   session_id : String,
@@ -28,7 +30,8 @@ pub fn SubprocessBackend::set_session_id(
   self.session_id = session_id
 }
 
-///| AgentBackend implementation for SubprocessBackend
+///|
+/// AgentBackend implementation for SubprocessBackend
 impl AgentBackend for SubprocessBackend with run(
   self,
   task,
@@ -43,7 +46,8 @@ impl AgentBackend for SubprocessBackend with run(
   }
 }
 
-///| Run via Claude Agent SDK
+///|
+/// Run via Claude Agent SDK
 fn SubprocessBackend::run_claude_code(
   self : SubprocessBackend,
   task : String,
@@ -77,10 +81,12 @@ fn SubprocessBackend::run_claude_code(
   let raw_output = run_claude_sdk(opts_json)
   if raw_output.has_prefix("ERROR:") {
     let err = raw_output
-    on_output(
-      @types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)),
-    )
-    return { content: "", status: @types.AgentStatus::Failed(err), error: Some(err) }
+    on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)))
+    return {
+      content: "",
+      status: @types.AgentStatus::Failed(err),
+      error: Some(err),
+    }
   }
   // Parse JSONL output (single-pass: parse_sdk_event returns error status)
   let buf = StringBuilder::new()
@@ -101,9 +107,7 @@ fn SubprocessBackend::run_claude_code(
   let content = buf.to_string()
   if has_error {
     let err = error_buf.to_string()
-    on_output(
-      @types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)),
-    )
+    on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)))
     { content, status: @types.AgentStatus::Failed(err), error: Some(err) }
   } else {
     on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Completed))
@@ -112,7 +116,9 @@ fn SubprocessBackend::run_claude_code(
 }
 
 ///| Parse a single SDK JSONL event line.
-///| Returns true if the line contained a result event with is_error=true.
+
+///|
+/// Returns true if the line contained a result event with is_error=true.
 fn SubprocessBackend::parse_sdk_event(
   self : SubprocessBackend,
   line : String,
@@ -138,26 +144,23 @@ fn SubprocessBackend::parse_sdk_event(
           match event_type {
             "system" => parse_system_event(map, on_output)
             "assistant" => parse_tool_calls(map, on_output)
-            "stream_event" => {
+            "stream_event" =>
               // SDK wraps Anthropic streaming events in stream_event
               match map.get("event") {
                 Some(Object(event)) =>
                   self.parse_stream_event(event, buf, line_buf, on_output)
                 _ => ()
               }
-            }
             "tool_result" => parse_tool_result(map, on_output)
             // CLI-compatible event types
-            "content_block_start" =>
-              parse_content_block_start(map, on_output)
+            "content_block_start" => parse_content_block_start(map, on_output)
             "result" => {
               parse_sdk_result_event(map, on_output)
               // Check for error in the result event
               match map.get("is_error") {
                 Some(True) => {
                   match map.get("result") {
-                    Some(String(err_msg)) =>
-                      error_buf.write_string(err_msg)
+                    Some(String(err_msg)) => error_buf.write_string(err_msg)
                     _ => ()
                   }
                   return true
@@ -175,7 +178,8 @@ fn SubprocessBackend::parse_sdk_event(
   false
 }
 
-///| Parse an SDK stream_event's inner Anthropic event
+///|
+/// Parse an SDK stream_event's inner Anthropic event
 fn SubprocessBackend::parse_stream_event(
   _self : SubprocessBackend,
   event : Map[String, Json],
@@ -187,7 +191,7 @@ fn SubprocessBackend::parse_stream_event(
     Some(String(event_type)) =>
       match event_type {
         "content_block_start" => parse_content_block_start(event, on_output)
-        "content_block_delta" => {
+        "content_block_delta" =>
           match event.get("delta") {
             Some(Object(delta)) =>
               match delta.get("type") {
@@ -205,14 +209,14 @@ fn SubprocessBackend::parse_stream_event(
               }
             _ => ()
           }
-        }
         _ => ()
       }
     _ => ()
   }
 }
 
-///| Parse SDK result event (uses total_cost_usd instead of cost_usd)
+///|
+/// Parse SDK result event (uses total_cost_usd instead of cost_usd)
 pub fn parse_sdk_result_event(
   map : Map[String, Json],
   on_output : (@types.AgentEvent) -> Unit,
@@ -284,9 +288,7 @@ pub fn parse_sdk_result_event(
         _ => 0
       }
       if input_tokens > 0 || output_tokens > 0 {
-        buf.write_string(
-          ", tokens=\{input_tokens}in/\{output_tokens}out",
-        )
+        buf.write_string(", tokens=\{input_tokens}in/\{output_tokens}out")
         if cache_read > 0 {
           buf.write_string(" (cache_read=\{cache_read})")
         }
@@ -299,17 +301,18 @@ pub fn parse_sdk_result_event(
   if input_tokens > 0 || output_tokens > 0 || cost_usd > 0.0 {
     on_output(
       @types.AgentEvent::Usage(
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cache_read=cache_read,
-        cache_write=cache_write,
-        cost_usd=cost_usd,
+        input_tokens~,
+        output_tokens~,
+        cache_read~,
+        cache_write~,
+        cost_usd~,
       ),
     )
   }
 }
 
-///| Run via Codex SDK
+///|
+/// Run via Codex SDK
 fn SubprocessBackend::run_codex(
   self : SubprocessBackend,
   task : String,
@@ -338,10 +341,12 @@ fn SubprocessBackend::run_codex(
   let raw_output = run_codex_sdk(opts_json)
   if raw_output.has_prefix("ERROR:") {
     let err = raw_output
-    on_output(
-      @types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)),
-    )
-    return { content: "", status: @types.AgentStatus::Failed(err), error: Some(err) }
+    on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)))
+    return {
+      content: "",
+      status: @types.AgentStatus::Failed(err),
+      error: Some(err),
+    }
   }
   // Parse JSONL output (reuse the same parse_sdk_event format)
   let buf = StringBuilder::new()
@@ -362,9 +367,7 @@ fn SubprocessBackend::run_codex(
   let content = buf.to_string()
   if has_error {
     let err = error_buf.to_string()
-    on_output(
-      @types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)),
-    )
+    on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Failed(err)))
     { content, status: @types.AgentStatus::Failed(err), error: Some(err) }
   } else {
     on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Completed))
@@ -372,7 +375,8 @@ fn SubprocessBackend::run_codex(
   }
 }
 
-///| AgentBackend implementation for SubprocessBackend
+///|
+/// AgentBackend implementation for SubprocessBackend
 impl AgentBackend for SubprocessBackend with name(self) {
   match self.kind {
     ClaudeCode => "claude-code"
@@ -391,7 +395,8 @@ impl AgentBackend for SubprocessBackend with get_session_id(self) {
   self.session_id
 }
 
-///| Wrap in BoxedBackend for dynamic dispatch
+///|
+/// Wrap in BoxedBackend for dynamic dispatch
 pub fn SubprocessBackend::boxed(self : SubprocessBackend) -> BoxedBackend {
   BoxedBackend::new(self)
 }

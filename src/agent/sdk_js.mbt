@@ -1,11 +1,15 @@
 ///| Run Claude Agent SDK via runner script
-///| Returns JSONL output string. stderr is inherited (shown in real-time).
+
+///|
+/// Returns JSONL output string. stderr is inherited (shown in real-time).
 pub fn run_claude_sdk(opts_json : String) -> String {
   js_run_sdk("claude-runner.mjs", opts_json)
 }
 
 ///| Run Codex SDK via runner script
-///| Returns JSONL output string. stderr is inherited (shown in real-time).
+
+///|
+/// Returns JSONL output string. stderr is inherited (shown in real-time).
 pub fn run_codex_sdk(opts_json : String) -> String {
   js_run_sdk("codex-runner.mjs", opts_json)
 }

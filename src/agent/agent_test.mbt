@@ -1,3 +1,4 @@
+///|
 test "MockBackend with default response" {
   let mock = @agent.MockBackend::new()
   let backend = mock.boxed()
@@ -15,6 +16,7 @@ test "MockBackend with default response" {
   inspect(events[0], content="mock response")
 }
 
+///|
 test "MockBackend with custom responses" {
   let mock = @agent.MockBackend::new()
   mock.add_response("build", "building complete")
@@ -26,6 +28,7 @@ test "MockBackend with custom responses" {
   inspect(result2.content, content="tests passed")
 }
 
+///|
 test "MockBackend falls back to default" {
   let mock = @agent.MockBackend::new(default_response="fallback")
   let backend = mock.boxed()
@@ -33,6 +36,7 @@ test "MockBackend falls back to default" {
   inspect(result.content, content="fallback")
 }
 
+///|
 test "MockBackend tracks call history" {
   let mock = @agent.MockBackend::new()
   let backend = mock.boxed()
@@ -48,6 +52,7 @@ test "MockBackend tracks call history" {
   inspect(p2, content="prompt2")
 }
 
+///|
 test "MockBackend emits status events" {
   let mock = @agent.MockBackend::new()
   let backend = mock.boxed()
@@ -65,6 +70,7 @@ test "MockBackend emits status events" {
   inspect(statuses[1], content="Completed")
 }
 
+///|
 test "FailingMockBackend returns failure" {
   let mock = @agent.FailingMockBackend::new(error_msg="oops")
   let backend = mock.boxed()
@@ -74,6 +80,7 @@ test "FailingMockBackend returns failure" {
   inspect(result.error, content="Some(\"oops\")")
 }
 
+///|
 test "FailingMockBackend emits failure events" {
   let mock = @agent.FailingMockBackend::new()
   let backend = mock.boxed()
@@ -91,6 +98,7 @@ test "FailingMockBackend emits failure events" {
   inspect(statuses[1], content="Failed(\"mock error\")")
 }
 
+///|
 test "BoxedBackend wraps MockBackend" {
   let mock = @agent.MockBackend::new(default_response="boxed result")
   let boxed = mock.boxed()
@@ -99,6 +107,7 @@ test "BoxedBackend wraps MockBackend" {
   inspect(result.content, content="boxed result")
 }
 
+///|
 test "BoxedBackend wraps FailingMockBackend" {
   let mock = @agent.FailingMockBackend::new(error_msg="boxed error")
   let boxed = mock.boxed()
@@ -107,6 +116,7 @@ test "BoxedBackend wraps FailingMockBackend" {
   inspect(result.status, content="Failed(\"boxed error\")")
 }
 
+///|
 test "SubprocessBackend name via boxed" {
   let cc = @agent.SubprocessBackend::new(@types.AgentKind::ClaudeCode)
   let boxed = cc.boxed()
@@ -116,6 +126,7 @@ test "SubprocessBackend name via boxed" {
   inspect(boxed2.name(), content="codex")
 }
 
+///|
 test "MockBackend name via boxed" {
   let mock = @agent.MockBackend::new()
   let boxed = mock.boxed()
@@ -124,7 +135,8 @@ test "MockBackend name via boxed" {
 
 // ── parse_events.mbt tests ──────────────────────────────────
 
-///| Helper: collect events into categorized arrays
+///|
+/// Helper: collect events into categorized arrays
 struct EventCollector {
   infos : Array[String]
   tool_calls : Array[(String, String)]
@@ -133,17 +145,15 @@ struct EventCollector {
   sub_ends : Array[String]
 }
 
+///|
 fn EventCollector::new() -> EventCollector {
-  {
-    infos: [],
-    tool_calls: [],
-    tool_results: [],
-    sub_starts: [],
-    sub_ends: [],
-  }
+  { infos: [], tool_calls: [], tool_results: [], sub_starts: [], sub_ends: [] }
 }
 
-fn EventCollector::handler(self : EventCollector) -> (@types.AgentEvent) -> Unit {
+///|
+fn EventCollector::handler(
+  self : EventCollector,
+) -> (@types.AgentEvent) -> Unit {
   fn(event) {
     match event {
       @types.AgentEvent::Info(msg) => self.infos.push(msg)
@@ -159,7 +169,8 @@ fn EventCollector::handler(self : EventCollector) -> (@types.AgentEvent) -> Unit
   }
 }
 
-///| Helper: parse a JSON string into a Map
+///|
+/// Helper: parse a JSON string into a Map
 fn json_map(s : String) -> Map[String, Json] {
   let json = @json.parse(s) catch { _ => panic() }
   match json {
@@ -170,6 +181,7 @@ fn json_map(s : String) -> Map[String, Json] {
 
 // ── OutputLineBuffer ──
 
+///|
 test "OutputLineBuffer emits complete lines only" {
   let lb = @agent.OutputLineBuffer::new()
   let lines : Array[String] = []
@@ -180,6 +192,7 @@ test "OutputLineBuffer emits complete lines only" {
   inspect(lines[0], content="TODOロード")
 }
 
+///|
 test "OutputLineBuffer flush emits trailing partial line" {
   let lb = @agent.OutputLineBuffer::new()
   let lines : Array[String] = []
@@ -192,6 +205,7 @@ test "OutputLineBuffer flush emits trailing partial line" {
 
 // ── parse_tool_calls ──
 
+///|
 test "parse_tool_calls extracts tool_use blocks" {
   let ec = EventCollector::new()
   let s =
@@ -210,6 +224,7 @@ test "parse_tool_calls extracts tool_use blocks" {
   assert_true(ec.tool_calls[0].1.contains("foo.mbt"))
 }
 
+///|
 test "parse_tool_calls detects Task subagent launch" {
   let ec = EventCollector::new()
   let s =
@@ -231,6 +246,7 @@ test "parse_tool_calls detects Task subagent launch" {
   inspect(ec.sub_starts[0].1, content="run tests")
 }
 
+///|
 test "parse_tool_calls handles multiple blocks" {
   let ec = EventCollector::new()
   let s =
@@ -252,6 +268,7 @@ test "parse_tool_calls handles multiple blocks" {
   inspect(ec.tool_calls[1].0, content="Read")
 }
 
+///|
 test "parse_tool_calls handles missing message gracefully" {
   let ec = EventCollector::new()
   let s =
@@ -261,6 +278,7 @@ test "parse_tool_calls handles missing message gracefully" {
   assert_true(ec.tool_calls.is_empty())
 }
 
+///|
 test "parse_tool_calls handles missing content array" {
   let ec = EventCollector::new()
   let s =
@@ -270,6 +288,7 @@ test "parse_tool_calls handles missing content array" {
   assert_true(ec.tool_calls.is_empty())
 }
 
+///|
 test "parse_tool_calls defaults tool name to unknown" {
   let ec = EventCollector::new()
   let s =
@@ -289,6 +308,7 @@ test "parse_tool_calls defaults tool name to unknown" {
 
 // ── parse_tool_result ──
 
+///|
 test "parse_tool_result with tool_name field" {
   let ec = EventCollector::new()
   let s =
@@ -300,6 +320,7 @@ test "parse_tool_result with tool_name field" {
   inspect(ec.tool_results[0].1, content="file list output")
 }
 
+///|
 test "parse_tool_result falls back to name field" {
   let ec = EventCollector::new()
   let s =
@@ -310,6 +331,7 @@ test "parse_tool_result falls back to name field" {
   inspect(ec.tool_results[0].0, content="Read")
 }
 
+///|
 test "parse_tool_result defaults to unknown when no name" {
   let ec = EventCollector::new()
   let s =
@@ -320,6 +342,7 @@ test "parse_tool_result defaults to unknown when no name" {
   inspect(ec.tool_results[0].0, content="unknown")
 }
 
+///|
 test "parse_tool_result stringifies non-string content" {
   let ec = EventCollector::new()
   let s =
@@ -329,6 +352,7 @@ test "parse_tool_result stringifies non-string content" {
   assert_true(ec.tool_results[0].1.contains("42"))
 }
 
+///|
 test "parse_tool_result handles missing content" {
   let ec = EventCollector::new()
   let s =
@@ -338,6 +362,7 @@ test "parse_tool_result handles missing content" {
   inspect(ec.tool_results[0].1, content="")
 }
 
+///|
 test "parse_tool_result emits SubAgentEnd for Task tool" {
   let ec = EventCollector::new()
   let s =
@@ -349,6 +374,7 @@ test "parse_tool_result emits SubAgentEnd for Task tool" {
   inspect(ec.sub_ends[0], content="Task")
 }
 
+///|
 test "parse_tool_result does not emit SubAgentEnd for non-Task" {
   let ec = EventCollector::new()
   let s =
@@ -360,6 +386,7 @@ test "parse_tool_result does not emit SubAgentEnd for non-Task" {
 
 // ── parse_system_event ──
 
+///|
 test "parse_system_event init with model and tools" {
   let ec = EventCollector::new()
   let s =
@@ -371,6 +398,7 @@ test "parse_system_event init with model and tools" {
   assert_true(ec.infos[0].contains("tools=2"))
 }
 
+///|
 test "parse_system_event init with missing fields" {
   let ec = EventCollector::new()
   let s =
@@ -382,6 +410,7 @@ test "parse_system_event init with missing fields" {
   assert_true(ec.infos[0].contains("tools=0"))
 }
 
+///|
 test "parse_system_event ignores non-init subtypes" {
   let ec = EventCollector::new()
   let s =
@@ -391,6 +420,7 @@ test "parse_system_event ignores non-init subtypes" {
   assert_true(ec.infos.is_empty())
 }
 
+///|
 test "parse_system_event ignores missing subtype" {
   let ec = EventCollector::new()
   let s =
@@ -402,6 +432,7 @@ test "parse_system_event ignores missing subtype" {
 
 // ── parse_content_block_start ──
 
+///|
 test "parse_content_block_start tool_use" {
   let ec = EventCollector::new()
   let s =
@@ -412,6 +443,7 @@ test "parse_content_block_start tool_use" {
   inspect(ec.infos[0], content="Using tool: Bash")
 }
 
+///|
 test "parse_content_block_start tool_use without name" {
   let ec = EventCollector::new()
   let s =
@@ -422,6 +454,7 @@ test "parse_content_block_start tool_use without name" {
   inspect(ec.infos[0], content="Using tool: unknown")
 }
 
+///|
 test "parse_content_block_start thinking" {
   let ec = EventCollector::new()
   let s =
@@ -432,6 +465,7 @@ test "parse_content_block_start thinking" {
   inspect(ec.infos[0], content="Thinking...")
 }
 
+///|
 test "parse_content_block_start text" {
   let ec = EventCollector::new()
   let s =
@@ -442,6 +476,7 @@ test "parse_content_block_start text" {
   inspect(ec.infos[0], content="Generating response...")
 }
 
+///|
 test "parse_content_block_start ignores unknown type" {
   let ec = EventCollector::new()
   let s =
@@ -451,6 +486,7 @@ test "parse_content_block_start ignores unknown type" {
   assert_true(ec.infos.is_empty())
 }
 
+///|
 test "parse_content_block_start handles missing content_block" {
   let ec = EventCollector::new()
   let s =
@@ -462,6 +498,7 @@ test "parse_content_block_start handles missing content_block" {
 
 // ── parse_sdk_result_event ──
 
+///|
 test "parse_sdk_result_event with full metrics" {
   let ec = EventCollector::new()
   let s =
@@ -486,6 +523,7 @@ test "parse_sdk_result_event with full metrics" {
   assert_true(info.contains("tokens=5000in/1200out"))
 }
 
+///|
 test "parse_sdk_result_event falls back to cost_usd" {
   let ec = EventCollector::new()
   let s =
@@ -495,6 +533,7 @@ test "parse_sdk_result_event falls back to cost_usd" {
   assert_true(ec.infos[0].contains("cost=$"))
 }
 
+///|
 test "parse_sdk_result_event with minimal fields" {
   let ec = EventCollector::new()
   let s =
@@ -505,6 +544,7 @@ test "parse_sdk_result_event with minimal fields" {
   inspect(ec.infos[0], content="Result: ")
 }
 
+///|
 test "parse_sdk_result_event omits zero tokens" {
   let ec = EventCollector::new()
   let s =

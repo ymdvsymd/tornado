@@ -1,4 +1,5 @@
-///| Create a BoxedBackend from AgentConfig
+///|
+/// Create a BoxedBackend from AgentConfig
 pub fn create_backend(config : @types.AgentConfig) -> BoxedBackend {
   match config.kind {
     ClaudeCode => {
@@ -19,7 +20,8 @@ pub fn create_backend(config : @types.AgentConfig) -> BoxedBackend {
   }
 }
 
-///| Create backends map from agent configs
+///|
+/// Create backends map from agent configs
 pub fn create_backends(
   agents : Array[@types.AgentConfig],
 ) -> Map[String, BoxedBackend] {
