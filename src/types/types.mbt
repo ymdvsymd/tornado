@@ -107,6 +107,7 @@ pub(all) struct OrchestratorCallbacks {
   on_phase_change : (String, OrchestratorPhase) -> Unit // (session_id, phase)
   on_session_complete : (String) -> Unit // (session_id)
   on_info : (String) -> Unit // generic info message
+  on_save : () -> Unit // persist milestones state
 }
 
 ///| Create noop callbacks for testing
@@ -122,6 +123,7 @@ pub fn OrchestratorCallbacks::noop() -> OrchestratorCallbacks {
     on_phase_change: fn(_session_id, _phase) {  },
     on_session_complete: fn(_session_id) {  },
     on_info: fn(_msg) {  },
+    on_save: fn() {  },
   }
 }
 

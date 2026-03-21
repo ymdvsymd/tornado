@@ -128,5 +128,6 @@ pub fn TuiState::make_callbacks(
       self.phase_log.push("[session complete]")
     },
     on_info: fn(msg) { self.phase_log.push(msg) },
+    on_save: fn() {  },
   }
 }

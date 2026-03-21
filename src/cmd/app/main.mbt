@@ -204,6 +204,7 @@ fn run_ralph(
     on_phase_change: fn(_sid, phase) { log("INFO", "Phase: \{phase}") },
     on_session_complete: fn(_sid) { log("INFO", "Session complete") },
     on_info: fn(msg) { log("INFO", msg) },
+    on_save: fn() { write_file_sync(milestones_path, mgr.to_json()) },
   }
   // Run ralph loop
   let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks, lang~)

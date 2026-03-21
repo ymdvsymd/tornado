@@ -92,13 +92,16 @@ fn RalphLoop::run_milestone(
             if tasks.is_empty() {
               emit_info(self, "Planner produced no tasks for \{milestone.id}")
               milestone.status = Failed("No tasks planned")
+              self.save_milestones()
               return false
             }
             milestone.tasks = tasks
+            self.save_milestones()
           }
           None => {
             emit_info(self, "No backend found for planner")
             milestone.status = Failed("No planner backend")
+            self.save_milestones()
             return false
           }
         }
@@ -110,6 +113,7 @@ fn RalphLoop::run_milestone(
   }
   // Execute waves
   milestone.status = @types.MilestoneStatus::InProgress
+  self.save_milestones()
   while self.milestone_manager.has_undone_tasks(milestone) {
     let wave = self.milestone_manager.next_wave_number(milestone)
     match wave {
@@ -118,6 +122,7 @@ fn RalphLoop::run_milestone(
         let success = self.run_wave(milestone, wave_num)
         if not(success) {
           milestone.status = Failed("Wave \{wave_num} failed")
+          self.save_milestones()
           return false
         }
       }
@@ -128,13 +133,17 @@ fn RalphLoop::run_milestone(
   if not(goal_ok) {
     match milestone.status {
       Failed(_) => ()
-      _ => milestone.status = Failed("Goal alignment verification failed")
+      _ => {
+        milestone.status = Failed("Goal alignment verification failed")
+        self.save_milestones()
+      }
     }
     return false
   }
   milestone.summary = generate_milestone_summary(milestone)
   milestone.status = Done
   self.current_phase = MilestoneComplete(milestone.id)
+  self.save_milestones()
   emit_info(self, "Milestone \{milestone.id} complete")
   true
 }
@@ -195,6 +204,7 @@ fn RalphLoop::run_wave(
           }
         }
       }
+      self.save_milestones() // persist after wave task execution
     }
   }
   // Verify wave
@@ -264,6 +274,7 @@ fn RalphLoop::verify_wave(
             MilestoneFailed(reason) => {
               emit_info(self, "Milestone failed: \{reason}")
               milestone.status = Failed(reason)
+              self.save_milestones()
               false
             }
           }
@@ -331,6 +342,7 @@ fn RalphLoop::verify_goal_alignment(
             MilestoneFailed(reason) => {
               emit_info(self, "Milestone failed: \{reason}")
               milestone.status = Failed(reason)
+              self.save_milestones()
               false
             }
           }
@@ -474,8 +486,14 @@ fn RalphLoop::rework_task_list(
           }
         }
       }
+      self.save_milestones() // persist after rework execution
     }
   }
+}
+
+///| Persist milestones state to disk via callback
+fn RalphLoop::save_milestones(self : RalphLoop) -> Unit {
+  (self.callbacks.on_save)()
 }
 
 // --- Internal helpers ---
