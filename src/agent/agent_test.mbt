@@ -558,3 +558,18 @@ test "parse_sdk_result_event omits zero tokens" {
   @agent.parse_sdk_result_event(map, ec.handler())
   assert_true(not(ec.infos[0].contains("tokens=")))
 }
+
+// ── Codex stream_event text accumulation ──
+
+test "parse_sdk_event_line accumulates Codex text_delta in buf" {
+  let buf = StringBuilder::new()
+  let lb = @agent.OutputLineBuffer::new()
+  let err_buf = StringBuilder::new()
+  let ec = EventCollector::new()
+  let line =
+    #|{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Codex result content"}}}
+  let _has_error = @agent.parse_sdk_event_line(
+    line, buf, lb, err_buf, ec.handler(), fn(_sid) {  },
+  )
+  inspect(buf.to_string(), content="Codex result content")
+}

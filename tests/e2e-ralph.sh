@@ -74,7 +74,6 @@ if [ "$MODE" = "live" ]; then
 - Create a minimal Node.js hello-world project with one source file and one test file
 
 ## Constraints
-- Each milestone should require at most 2 tasks in a single wave
 - Do not install any npm packages
 EOF
   BRIEF="$(build_live_brief "$TMP_DIR/plan.md")"
@@ -121,21 +120,14 @@ cat >"$TMP_DIR/milestones.json" <<EOF
   "milestones": [
     {
       "id": "m1",
-      "goal": "Create src/hello.js that exports a greet(name) function returning 'Hello, <name>!'",
+      "goal": "Create src/hello.js exporting greet(name) that returns 'Hello, <name>!' and create tests/hello.test.js using Node assert to verify greet('World') === 'Hello, World!'",
       "status": "pending",
       "summary": "",
       "tasks": []
     },
     {
       "id": "m2",
-      "goal": "Create tests/hello.test.js that uses Node assert to test greet('World') === 'Hello, World!'",
-      "status": "pending",
-      "summary": "",
-      "tasks": []
-    },
-    {
-      "id": "m3",
-      "goal": "Run 'node tests/hello.test.js' and verify it exits with code 0",
+      "goal": "Run 'node tests/hello.test.js' and verify it exits with code 0 with no assertion errors",
       "status": "pending",
       "summary": "",
       "tasks": []
@@ -195,11 +187,9 @@ assert_milestone_summary_non_empty() {
 
 assert_contains "Milestone m1 complete"
 assert_contains "Milestone m2 complete"
-assert_contains "Milestone m3 complete"
 assert_contains "Milestones saved to milestones.json"
 
 assert_milestone_summary_non_empty "$TMP_DIR/milestones.json" "m1"
-assert_milestone_summary_non_empty "$TMP_DIR/milestones.json" "m2"
 
 if [ ! -f "$LOG_FILE" ]; then
   echo "FAIL: expected log file to exist: $LOG_FILE" >&2
@@ -213,6 +203,5 @@ fi
 
 assert_file_contains "$LOG_FILE" "Milestone m1 complete"
 assert_file_contains "$LOG_FILE" "Milestone m2 complete"
-assert_file_contains "$LOG_FILE" "Milestone m3 complete"
 
 echo "PASS: All e2e assertions passed ($MODE)"

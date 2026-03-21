@@ -125,14 +125,10 @@ export function normalizeItemComplete(item: CodexItem): UnknownRecord | null {
     case "agent_message": {
       const text = item.text || "";
       return {
-        type: "assistant",
-        message: {
-          content: [
-            {
-              type: "text",
-              text,
-            },
-          ],
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          delta: { type: "text_delta", text },
         },
         _display: `Message: ${truncate(text)}`,
       };
