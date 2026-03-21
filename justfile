@@ -18,7 +18,7 @@ build:
 
 pack: build
   mkdir -p bin
-  echo '#!/usr/bin/env node' > bin/tornado.js
+  printf '\x23\x21/usr/bin/env node\n' > bin/tornado.js
   cat _build/js/debug/build/cmd/app/app.js >> bin/tornado.js
   chmod +x bin/tornado.js
 
