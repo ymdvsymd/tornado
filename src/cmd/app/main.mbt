@@ -67,7 +67,7 @@ fn main {
         None => println("Usage: tornado validate <config.json>")
       }
     @cli.CliCommand::Help => print_usage()
-    @cli.CliCommand::Version => println("tornado v0.7.4")
+    @cli.CliCommand::Version => println("tornado v__VERSION__")
   }
 }
 
