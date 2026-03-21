@@ -159,15 +159,23 @@ fn RalphLoop::run_wave(
     }
     Some(backend) => {
       let bid = builder_id.unwrap()
-      // Execute each task sequentially
+      let builder_system_prompt = build_builder_system_prompt(
+        self.milestone_manager.brief,
+      )
+      let builder_tasks : Array[(String, String)] = []
       for task in tasks {
         task.status = InProgress(bid)
         emit_info(self, "Running task \{task.id}: \{task.description}")
-        let result = backend.run(
-          task.description,
-          build_builder_system_prompt(self.milestone_manager.brief),
-          fn(e) { handle_event(self, bid, e) },
-        )
+        builder_tasks.push((task.description, builder_system_prompt))
+      }
+      let results = @agent.run_parallel(
+        backend,
+        builder_tasks,
+        fn(e) { handle_event(self, bid, e) },
+      )
+      for i in 0..<tasks.length() {
+        let task = tasks[i]
+        let result = results[i]
         match result.status {
           Completed => {
             task.status = Done
@@ -402,6 +410,11 @@ fn RalphLoop::rework_task_list(
     None => ()
     Some(backend) => {
       let bid = builder_id.unwrap()
+      let builder_system_prompt = build_builder_system_prompt(
+        self.milestone_manager.brief,
+      )
+      let rework_tasks : Array[@types.RalphTask] = []
+      let builder_tasks : Array[(String, String)] = []
       for task in tasks {
         match task.status {
           Failed(_) | Pending => {
@@ -427,24 +440,30 @@ fn RalphLoop::rework_task_list(
             let rework_prompt = task.description +
               "\n\nFeedback from verifier:\n" + feedback_str
             emit_info(self, "Reworking task \{task.id}")
-            let result = backend.run(
-              rework_prompt,
-              build_builder_system_prompt(self.milestone_manager.brief),
-              fn(e) { handle_event(self, bid, e) },
-            )
-            match result.status {
-              Completed => {
-                task.status = Done
-                task.result = Some(result.content)
-              }
-              _ => {
-                let err = result.error.unwrap_or("rework failed")
-                task.status = Failed(err)
-                task.result = Some(result.content)
-              }
-            }
+            rework_tasks.push(task)
+            builder_tasks.push((rework_prompt, builder_system_prompt))
           }
           _ => ()
+        }
+      }
+      let results = @agent.run_parallel(
+        backend,
+        builder_tasks,
+        fn(e) { handle_event(self, bid, e) },
+      )
+      for i in 0..<rework_tasks.length() {
+        let task = rework_tasks[i]
+        let result = results[i]
+        match result.status {
+          Completed => {
+            task.status = Done
+            task.result = Some(result.content)
+          }
+          _ => {
+            let err = result.error.unwrap_or("rework failed")
+            task.status = Failed(err)
+            task.result = Some(result.content)
+          }
         }
       }
     }
