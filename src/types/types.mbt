@@ -219,6 +219,7 @@ pub(all) struct Milestone {
   mut status : MilestoneStatus
   mut tasks : Array[RalphTask]
   mut current_wave : Int
+  mut summary : String
 }
 
 ///| A task within the ralph loop

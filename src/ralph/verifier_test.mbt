@@ -56,6 +56,7 @@ test "VerifierAgent::build_perspective_prompt includes code quality checklist" {
     status: @types.MilestoneStatus::InProgress,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
   let prompt = v.build_perspective_prompt(CodeQuality, milestone, 0, [], "")
   assert_true(prompt.contains("Code Quality") || prompt.contains("コード品質"))
@@ -70,6 +71,7 @@ test "VerifierAgent::build_perspective_prompt includes performance checklist" {
     status: @types.MilestoneStatus::InProgress,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
   let prompt = v.build_perspective_prompt(Performance, milestone, 0, [], "")
   assert_true(prompt.contains("Performance") || prompt.contains("パフォーマンス"))
@@ -84,6 +86,7 @@ test "VerifierAgent::build_perspective_prompt includes security checklist" {
     status: @types.MilestoneStatus::InProgress,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
   let prompt = v.build_perspective_prompt(Security, milestone, 0, [], "")
   assert_true(prompt.contains("Security") || prompt.contains("セキュリティ"))
@@ -98,6 +101,7 @@ test "VerifierAgent::build_perspective_prompt goal alignment includes milestone 
     status: @types.MilestoneStatus::InProgress,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
   let prompt = v.build_perspective_prompt(GoalAlignment, milestone, 0, [], "")
   assert_true(prompt.contains("Ship milestone goal text"))
@@ -112,6 +116,7 @@ test "VerifierAgent::build_perspective_prompt includes scope instructions" {
     status: @types.MilestoneStatus::InProgress,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
   let prompt = v.build_perspective_prompt(GoalAlignment, milestone, 0, [], "")
   assert_true(prompt.contains("## Instructions"))
@@ -200,6 +205,7 @@ test "VerifierAgent::verify with mock backend approved calls all four perspectiv
     status: @types.MilestoneStatus::InProgress,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
   let verdict = v.verify(milestone, 0, [], backend, "")
   let history = mock.get_history()
@@ -217,6 +223,7 @@ test "VerifierAgent::verify with failing mock backend is not approved" {
     status: @types.MilestoneStatus::InProgress,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
   let verdict = v.verify(milestone, 0, [], backend, "")
   match verdict {

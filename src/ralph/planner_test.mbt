@@ -6,11 +6,11 @@ test "PlannerAgent::build_plan_prompt includes milestone info" {
     status: @types.MilestoneStatus::Pending,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
-  let prompt = planner.build_plan_prompt(milestone, "Node.js project")
+  let prompt = planner.build_plan_prompt(milestone)
   assert_true(prompt.contains("m1"))
   assert_true(prompt.contains("Build authentication system"))
-  assert_true(prompt.contains("Node.js project"))
   assert_true(prompt.contains("WAVE"))
 }
 
@@ -22,8 +22,9 @@ test "PlannerAgent::build_plan_prompt lang=ja" {
     status: @types.MilestoneStatus::Pending,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
-  let prompt = planner.build_plan_prompt(milestone, "")
+  let prompt = planner.build_plan_prompt(milestone)
   assert_true(prompt.contains("Japanese"))
 }
 
@@ -55,8 +56,9 @@ test "PlannerAgent::plan with mock backend" {
     status: @types.MilestoneStatus::Pending,
     tasks: [],
     current_wave: 0,
+    summary: "",
   }
-  let tasks = planner.plan(milestone, backend, "", mgr)
+  let tasks = planner.plan(milestone, backend, "", [], mgr)
   assert_true(tasks.length() == 3)
   inspect(tasks[0].description, content="Create schema")
   inspect(tasks[2].wave, content="1")

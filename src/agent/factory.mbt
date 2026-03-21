@@ -17,6 +17,10 @@ pub fn create_backend(config : @types.AgentConfig) -> BoxedBackend {
     }
     Mock =>
       match config.role {
+        Planner =>
+          MockBackend::new(
+            default_response="WAVE 0:\n1. Mock planned task",
+          ).boxed()
         Verifier => MockBackend::new(default_response="<wave_approved>").boxed()
         _ => MockBackend::new().boxed()
       }

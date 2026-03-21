@@ -1,9 +1,13 @@
 import { Codex } from "@openai/codex-sdk";
 import { formatTurnCompletedLog, formatTurnFailedLog, normalizeItemComplete, normalizeItemStart, normalizeTurnCompleted, normalizeTurnFailed, } from "./codex-normalizer.mjs";
-export function createCodexAdapter(client = new Codex()) {
+export function createCodexAdapter(deps = {}) {
     return {
         tag: "Codex",
         async start(opts) {
+            const codexClientOpts = opts.systemPrompt
+                ? { config: { developer_instructions: opts.systemPrompt } }
+                : undefined;
+            const client = new (deps.CodexClient || Codex)(codexClientOpts);
             const threadOpts = {
                 model: opts.model || undefined,
                 workingDirectory: opts.cwd || process.cwd(),

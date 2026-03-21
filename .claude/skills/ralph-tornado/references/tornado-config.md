@@ -9,7 +9,7 @@
   "review_dir": ".runs/{date}_{name}",
   "max_rework_attempts": 3,
   "agents": [
-    { "id": "planner",  "kind": "mock",            "role": "planner",  "max_iterations": 1 },
+    { "id": "planner",  "kind": "<PLANNER_KIND>",  "role": "planner",  "max_iterations": 10 },
     { "id": "builder",  "kind": "<DEV_KIND>",      "role": "dev",      "max_iterations": 10 },
     { "id": "verifier", "kind": "<VERIFIER_KIND>", "role": "verifier", "max_iterations": 5 }
   ]
@@ -25,9 +25,11 @@
 
 | ID       | kind             | role     | 備考 |
 |----------|------------------|----------|------|
-| planner  | `mock` 固定      | planner  | tasks は事前定義済みのため mock |
+| planner  | `<PLANNER_KIND>` | planner  | デフォルト: `claude-code` |
 | builder  | `<DEV_KIND>`     | dev      | デフォルト: `codex` |
 | verifier | `<VERIFIER_KIND>`| verifier | デフォルト: `claude-code` |
+
+> `brief` は `tornado.json` ではなく `milestones.json` で管理する。
 
 ## 有効な agent kind 値
 

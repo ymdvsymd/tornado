@@ -1,27 +1,19 @@
-# milestones-skeleton.json スキーマ
+# milestones.json 形式
 
-`milestones-skeleton.json` は Plan Context **なし** の中間ファイル。
-`scripts/inject-plan-context.js` が Verification Scope と Plan Context を注入して `milestones.json` を生成する。
+このスキルは skeleton ではなく、`milestones.json` を直接生成する。
 
-## JSON 構造
+## JSON 例
 
 ```json
 {
+  "brief": "plan から skill が抽出した goals と constraints",
   "milestones": [
     {
       "id": "m1",
-      "goal": "Goal text from ## heading (in English)",
+      "goal": "## 見出しから抽出した goal の英語文",
       "status": "pending",
-      "tasks": [
-        {
-          "id": "m1-t1",
-          "description": "## Task\n<concrete instructions in English>\n\n## Acceptance Criteria\n- [ ] File exists: <path>\n- [ ] <path> contains: <expected content>\n- [ ] Run: <command> → <expected result>",
-          "wave": 0,
-          "status": "pending",
-          "result": null,
-          "plan_doc": null
-        }
-      ]
+      "summary": "",
+      "tasks": []
     }
   ]
 }
@@ -29,28 +21,24 @@
 
 ## フィールド定義
 
+| フィールド    | 型     | 説明 |
+| ------------- | ------ | ---- |
+| `brief`       | string | plan の goals と constraints を skill が抽出した要約 |
+| `milestones`  | array  | milestone 配列 |
+
 ### milestone
 
 | フィールド | 型     | 説明 |
-|-----------|--------|------|
-| `id`      | string | `m{連番}` 形式（例: `m1`, `m2`） |
-| `goal`    | string | `## 見出し` テキスト（英語） |
-| `status`  | string | 固定値: `"pending"` |
-| `tasks`   | array  | タスク配列 |
+| ---------- | ------ | ---- |
+| `id`       | string | `m{連番}` 形式（例: `m1`, `m2`） |
+| `goal`     | string | `## 見出し` テキストを英訳した milestone goal |
+| `status`   | string | 初期値は `"pending"` |
+| `summary`  | string | milestone 完了時に runtime が生成する要約。初期値は `""` |
+| `tasks`    | array  | 初期値は `[]` |
 
-### task
+## 注記
 
-| フィールド    | 型          | 説明 |
-|--------------|-------------|------|
-| `id`         | string      | `{milestone_id}-t{連番}` 形式（例: `m1-t1`） |
-| `description`| string      | description テンプレートに従った実装指示（英語） |
-| `wave`       | number      | Wave 番号（0始まり、`###` で +1） |
-| `status`     | string      | 固定値: `"pending"` |
-| `result`     | null        | 固定値: `null` |
-| `plan_doc`   | null        | 固定値: `null` |
-
-## skeleton 固有の注記
-
-- `goal` に Verification Scope・Plan Context は含めない（`inject-plan-context.js` が後で注入）
-- `description` に Plan Context は含めない（同上）
-- `wave` は `###` サブ見出しの出現ごとに +1（初期値 0）
+- skill は `milestones.json` を直接生成する。skeleton ファイルや後段の注入ステップは使わない
+- `brief` は Builder / Planner に渡す背景情報であり、実装詳細の全文コピーではなく短い要約にする
+- `summary` は各 milestone 完了後に runtime が書き戻し、次の Planner 実行時の背景情報として使われる
+- タスクはランタイムの Planner エージェントが自動生成します。

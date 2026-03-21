@@ -2,11 +2,12 @@
 pub struct MilestoneManager {
   milestones : Array[@types.Milestone]
   mut next_task_id : Int
+  brief : String
 }
 
 ///| Create an empty milestone manager
 pub fn MilestoneManager::new() -> MilestoneManager {
-  { milestones: [], next_task_id: 1 }
+  { milestones: [], next_task_id: 1, brief: "" }
 }
 
 ///| Load milestones from JSON string
@@ -19,7 +20,11 @@ pub fn MilestoneManager::load_from_json(
   let milestones : Array[@types.Milestone] = []
   let mut max_id = 0
   match json {
-    Object(map) =>
+    Object(map) => {
+      let brief = match map.get("brief") {
+        Some(String(s)) => s
+        _ => ""
+      }
       match map.get("milestones") {
         Some(Array(arr)) =>
           for item in arr {
@@ -34,9 +39,10 @@ pub fn MilestoneManager::load_from_json(
           }
         _ => ()
       }
+      { milestones, next_task_id: max_id + 1, brief }
+    }
     _ => raise Failure::Failure("Milestones must be a JSON object")
   }
-  { milestones, next_task_id: max_id + 1 }
 }
 
 ///| Serialize milestones to JSON string
@@ -45,7 +51,7 @@ pub fn MilestoneManager::to_json(self : MilestoneManager) -> String {
   for m in self.milestones {
     parts.push(milestone_to_json(m))
   }
-  "{\"milestones\":[" + join_strings(parts, ",") + "]}"
+  "{\"brief\":" + json_escape(self.brief) + ",\"milestones\":[" + join_strings(parts, ",") + "]}"
 }
 
 ///| Get the next pending milestone
@@ -149,6 +155,7 @@ fn parse_milestone(json : Json) -> @types.Milestone {
   }
   let tasks : Array[@types.RalphTask] = []
   let current_wave = get_num(json, "current_wave", 0)
+  let summary = get_str(json, "summary", "")
   match json {
     Object(map) =>
       match map.get("tasks") {
@@ -160,7 +167,7 @@ fn parse_milestone(json : Json) -> @types.Milestone {
       }
     _ => ()
   }
-  { id, goal, status, tasks, current_wave }
+  { id, goal, status, tasks, current_wave, summary }
 }
 
 fn parse_ralph_task(json : Json) -> @types.RalphTask {
@@ -215,6 +222,8 @@ fn milestone_to_json(m : @types.Milestone) -> String {
   m.current_wave.to_string() +
   ",\"tasks\":" +
   tasks_json +
+  ",\"summary\":" +
+  json_escape(m.summary) +
   "}"
 }
 

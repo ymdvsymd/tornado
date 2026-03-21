@@ -12,6 +12,12 @@ test:
   node --test sdk/*.test.mjs
   moon test --target js
 
+mock: pack
+  bash tests/e2e-ralph.sh mock
+
+live: pack
+  bash tests/e2e-ralph.sh live
+
 build:
   npm run -s build:sdk
   moon build --target js src/cmd/app

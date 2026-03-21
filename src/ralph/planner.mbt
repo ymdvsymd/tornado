@@ -16,7 +16,6 @@ pub fn PlannerAgent::new(
 pub fn PlannerAgent::build_plan_prompt(
   self : PlannerAgent,
   milestone : @types.Milestone,
-  project_context : String,
 ) -> String {
   let lang_instruction = if self.lang == "ja" {
     "Respond in Japanese."
@@ -33,11 +32,6 @@ pub fn PlannerAgent::build_plan_prompt(
   prompt.write_string("\nGoal: ")
   prompt.write_string(milestone.goal)
   prompt.write_string("\n\n")
-  if not(project_context.is_empty()) {
-    prompt.write_string("## Project Context\n")
-    prompt.write_string(project_context)
-    prompt.write_string("\n\n")
-  }
   prompt.write_string(
     "## Instructions\n" +
     "Break down this milestone into concrete tasks grouped by waves.\n" +
@@ -65,12 +59,13 @@ pub fn PlannerAgent::plan(
   self : PlannerAgent,
   milestone : @types.Milestone,
   backend : @agent.BoxedBackend,
-  project_context : String,
+  brief : String,
+  milestones : Array[@types.Milestone],
   mgr : MilestoneManager,
   on_event~ : (@types.AgentEvent) -> Unit = fn(_e) {  },
 ) -> Array[@types.RalphTask] {
-  let prompt = self.build_plan_prompt(milestone, project_context)
-  let system_prompt = "You are a planning agent that breaks down milestones into executable tasks."
+  let prompt = self.build_plan_prompt(milestone)
+  let system_prompt = build_planner_system_prompt(brief, milestones)
   let result = backend.run(prompt, system_prompt, on_event)
   match result.status {
     Completed => self.parse_plan(result.content, milestone.id, mgr)

@@ -211,11 +211,14 @@ pub fn parse_sdk_result_event(
 fn SubprocessBackend::run_codex(
   self : SubprocessBackend,
   task : String,
-  _system_prompt : String,
+  system_prompt : String,
   on_output : (@types.AgentEvent) -> Unit,
 ) -> @types.AgentResult {
   let opts : Map[String, Json] = {}
   opts["prompt"] = task.to_json()
+  if not(system_prompt.is_empty()) {
+    opts["systemPrompt"] = system_prompt.to_json()
+  }
   if not(self.model.is_empty()) {
     opts["model"] = self.model.to_json()
   }

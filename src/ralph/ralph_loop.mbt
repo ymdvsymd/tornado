@@ -82,7 +82,8 @@ fn RalphLoop::run_milestone(
             let tasks = planner.plan(
               milestone,
               backend,
-              "",
+              self.milestone_manager.brief,
+              self.milestone_manager.milestones,
               self.milestone_manager,
               on_event=fn(e) { handle_event(self, planner.agent_id, e) },
             )
@@ -120,6 +121,7 @@ fn RalphLoop::run_milestone(
       }
     }
   }
+  milestone.summary = generate_milestone_summary(milestone)
   milestone.status = Done
   self.current_phase = MilestoneComplete(milestone.id)
   emit_info(self, "Milestone \{milestone.id} complete")
@@ -153,7 +155,9 @@ fn RalphLoop::run_wave(
         task.status = InProgress(bid)
         emit_info(self, "Running task \{task.id}: \{task.description}")
         let result = backend.run(
-          task.description, "", fn(e) { handle_event(self, bid, e) },
+          task.description,
+          build_builder_system_prompt(self.milestone_manager.brief),
+          fn(e) { handle_event(self, bid, e) },
         )
         match result.status {
           Completed => {
@@ -328,7 +332,9 @@ fn RalphLoop::rework_tasks(
               "\n\nFeedback from verifier:\n" + feedback_str
             emit_info(self, "Reworking task \{task.id}")
             let result = backend.run(
-              rework_prompt, "", fn(e) { handle_event(self, bid, e) },
+              rework_prompt,
+              build_builder_system_prompt(self.milestone_manager.brief),
+              fn(e) { handle_event(self, bid, e) },
             )
             match result.status {
               Completed => {
@@ -351,6 +357,62 @@ fn RalphLoop::rework_tasks(
 }
 
 // --- Internal helpers ---
+
+///| Build system prompt for Planner: brief + completed milestone summaries
+fn build_planner_system_prompt(
+  brief : String,
+  milestones : Array[@types.Milestone],
+) -> String {
+  let buf = StringBuilder::new()
+  buf.write_string(
+    "You are a planning agent that breaks down milestones into executable tasks.\n\n",
+  )
+  if not(brief.is_empty()) {
+    buf.write_string("## Brief\n")
+    buf.write_string(brief)
+    buf.write_string("\n\n")
+  }
+  let mut has_completed = false
+  for m in milestones {
+    if m.status == @types.MilestoneStatus::Done && not(m.summary.is_empty()) {
+      if not(has_completed) {
+        buf.write_string("## Completed Milestones\n")
+        has_completed = true
+      }
+      buf.write_string("- ")
+      buf.write_string(m.id)
+      buf.write_string(": ")
+      buf.write_string(m.summary)
+      buf.write_string("\n")
+    }
+  }
+  if has_completed {
+    buf.write_string("\n")
+  }
+  buf.to_string()
+}
+
+///| Build system prompt for Builder/Rework: brief only
+fn build_builder_system_prompt(brief : String) -> String {
+  if brief.is_empty() {
+    return ""
+  }
+  "## Brief\n" + brief + "\n"
+}
+
+///| Generate milestone summary from completed task descriptions
+fn generate_milestone_summary(milestone : @types.Milestone) -> String {
+  let parts : Array[String] = []
+  for task in milestone.tasks {
+    if task.status == @types.TaskStatus::Done {
+      parts.push(task.description)
+    }
+  }
+  if parts.is_empty() {
+    return milestone.goal
+  }
+  join_strings(parts, "; ")
+}
 
 fn find_agent_id(
   config : @config.ProjectConfig,

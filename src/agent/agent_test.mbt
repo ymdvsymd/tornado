@@ -122,6 +122,20 @@ test "MockBackend name via boxed" {
   inspect(boxed.name(), content="mock")
 }
 
+test "create_backend uses parseable planner mock response" {
+  let backend = @agent.create_backend({
+    id: "planner",
+    kind: @types.AgentKind::Mock,
+    role: @types.AgentRole::Planner,
+    model: None,
+    system_prompt: None,
+    working_dir: ".",
+    max_iterations: 10,
+  })
+  let result = backend.run("plan milestone", "", fn(_) {  })
+  inspect(result.content, content="WAVE 0:\n1. Mock planned task")
+}
+
 test "run_parallel with MockBackend returns one result per task" {
   let mock = @agent.MockBackend::new()
   mock.add_response("task1", "result one")

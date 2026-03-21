@@ -30,6 +30,10 @@ type CodexClient = {
   resumeThread(threadId: string, opts: CodexThreadOptions): CodexThread;
 };
 
+type CodexClientConstructor = new (opts?: {
+  config?: { developer_instructions: string };
+}) => CodexClient;
+
 type CodexItem = {
   type?: string;
   _display?: string;
@@ -48,11 +52,19 @@ type CodexEvent = {
 };
 
 export function createCodexAdapter(
-  client: CodexClient = new Codex() as unknown as CodexClient,
+  deps: {
+    CodexClient?: CodexClientConstructor;
+  } = {},
 ): AgentAdapter<CodexEvent> {
   return {
     tag: "Codex",
     async start(opts: RunnerOptions): Promise<AdapterStartResult<CodexEvent>> {
+      const codexClientOpts = opts.systemPrompt
+        ? { config: { developer_instructions: opts.systemPrompt } }
+        : undefined;
+      const client = new (deps.CodexClient || (Codex as unknown as CodexClientConstructor))(
+        codexClientOpts,
+      );
       const threadOpts: CodexThreadOptions = {
         model: opts.model || undefined,
         workingDirectory: opts.cwd || process.cwd(),

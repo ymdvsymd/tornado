@@ -80,6 +80,121 @@ test "RalphLoop full cycle with single milestone" {
   inspect(rl.current_phase, content="AllComplete")
 }
 
+test "planner receives system prompt with brief and completed milestone summaries" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "brief": "Ship an auth service with audit logging.",
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1",
+    #|      "goal": "Setup project",
+    #|      "status": "done",
+    #|      "summary": "Initialized repo; added config",
+    #|      "tasks": []
+    #|    },
+    #|    {
+    #|      "id": "m2",
+    #|      "goal": "Build auth",
+    #|      "status": "pending",
+    #|      "tasks": []
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(
+    default_response="WAVE 0:\n1. Create schema",
+  )
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  let (_, system_prompt) = planner_mock.get_history()[0]
+  assert_true(
+    system_prompt.contains(
+      "You are a planning agent that breaks down milestones into executable tasks.\n\n",
+    ),
+  )
+  assert_true(
+    system_prompt.contains("## Brief\nShip an auth service with audit logging.\n\n"),
+  )
+  assert_true(
+    system_prompt.contains("## Completed Milestones\n- m1: Initialized repo; added config\n"),
+  )
+}
+
+test "builder receives system prompt with brief" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "brief": "Keep public APIs stable while refactoring internals.",
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Create schema", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  let (_, system_prompt) = builder_mock.get_history()[0]
+  let expected =
+    #|## Brief
+    #|Keep public APIs stable while refactoring internals.
+    #|
+  inspect(system_prompt, content=expected)
+}
+
+test "completed milestone summary concatenates completed task descriptions" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Create schema", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Build handlers", "wave": 1, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let callbacks = @types.OrchestratorCallbacks::noop()
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  inspect(mgr.milestones[0].summary, content="Create schema; Build handlers")
+}
+
 test "RalphLoop with pre-planned tasks" {
   let config = make_ralph_config()
   let json =
