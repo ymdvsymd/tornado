@@ -127,12 +127,12 @@ fn RalphLoop::run_milestone(
     }
   }
   let all_results = collect_all_task_results(milestone)
-  let goal_ok = self.verify_goal_alignment(milestone, all_results, 0)
-  if not(goal_ok) {
+  let verified = self.verify_milestone(milestone, all_results, 0)
+  if not(verified) {
     match milestone.status {
       Failed(_) => ()
       _ => {
-        milestone.status = Failed("Goal alignment verification failed")
+        milestone.status = Failed("Milestone verification failed")
         self.save_milestones()
       }
     }
@@ -202,85 +202,11 @@ fn RalphLoop::run_wave(
       self.save_milestones() // persist after wave task execution
     }
   }
-  // Verify wave
-  let wave_results = collect_wave_results(tasks)
-  self.verify_wave(milestone, wave, wave_results, 0)
+  true
 }
 
-///| Verify a wave with rework loop
-fn RalphLoop::verify_wave(
-  self : RalphLoop,
-  milestone : @types.Milestone,
-  wave : Int,
-  wave_results : Array[(String, String)],
-  attempt : Int,
-) -> Bool {
-  match self.verifier {
-    None => {
-      // No verifier configured, auto-approve
-      true
-    }
-    Some(verifier) => {
-      self.current_phase = Verifying(milestone.id, wave)
-      emit_info(
-        self,
-        "Verifying wave \{wave} of \{milestone.id} (attempt \{attempt + 1})",
-      )
-      let verifier_backend = find_backend(
-        self.backends, verifier.agent_id,
-      )
-      match verifier_backend {
-        None => {
-          emit_info(self, "No verifier backend found, auto-approving")
-          true
-        }
-        Some(backend) => {
-          let verdict = verifier.verify(
-            milestone,
-            wave,
-            wave_results,
-            backend,
-            "",
-            perspectives=[CodeQuality, Performance, Security],
-            on_event=fn(e) { handle_event(self, verifier.agent_id, e) },
-          )
-          match verdict {
-            Approved => {
-              emit_info(self, "Wave \{wave} approved")
-              true
-            }
-            NeedsRework(items) => {
-              if attempt >= self.max_rework_attempts {
-                emit_info(
-                  self,
-                  "Max rework attempts reached for wave \{wave}, accepting as-is",
-                )
-                return true
-              }
-              self.current_phase = Reworking(milestone.id, wave)
-              emit_info(
-                self,
-                "Rework needed for wave \{wave}: \{items.length()} issues",
-              )
-              // Re-execute failed tasks
-              let reworked = self.rework_tasks(milestone, wave, items)
-              self.verify_wave(milestone, wave, reworked, attempt + 1)
-            }
-            MilestoneFailed(reason) => {
-              emit_info(self, "Milestone failed: \{reason}")
-              milestone.status = Failed(reason)
-              self.save_milestones()
-              false
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-///| Verify overall milestone goal alignment after all waves are complete
-fn RalphLoop::verify_goal_alignment(
+///| Verify milestone after all waves are complete (all 4 perspectives)
+fn RalphLoop::verify_milestone(
   self : RalphLoop,
   milestone : @types.Milestone,
   all_results : Array[(String, String)],
@@ -293,7 +219,7 @@ fn RalphLoop::verify_goal_alignment(
       self.current_phase = Verifying(milestone.id, verification_wave)
       emit_info(
         self,
-        "Verifying goal alignment for \{milestone.id} (attempt \{attempt + 1})",
+        "Verifying milestone \{milestone.id} (attempt \{attempt + 1})",
       )
       let verifier_backend = find_backend(
         self.backends, verifier.agent_id,
@@ -310,29 +236,28 @@ fn RalphLoop::verify_goal_alignment(
             all_results,
             backend,
             "",
-            perspectives=[GoalAlignment],
             on_event=fn(e) { handle_event(self, verifier.agent_id, e) },
           )
           match verdict {
             Approved => {
-              emit_info(self, "Goal alignment approved for \{milestone.id}")
+              emit_info(self, "Milestone \{milestone.id} verification approved")
               true
             }
             NeedsRework(items) => {
               if attempt >= self.max_rework_attempts {
                 emit_info(
                   self,
-                  "Max rework attempts reached for goal alignment, accepting as-is",
+                  "Max rework attempts reached for milestone verification, accepting as-is",
                 )
                 return true
               }
               self.current_phase = Reworking(milestone.id, verification_wave)
               emit_info(
                 self,
-                "Goal alignment rework needed for \{milestone.id}: \{items.length()} issues",
+                "Milestone rework needed for \{milestone.id}: \{items.length()} issues",
               )
               let reworked = self.rework_milestone_tasks(milestone, items)
-              self.verify_goal_alignment(milestone, reworked, attempt + 1)
+              self.verify_milestone(milestone, reworked, attempt + 1)
             }
             MilestoneFailed(reason) => {
               emit_info(self, "Milestone failed: \{reason}")
@@ -365,18 +290,6 @@ fn strip_task_feedback_prefix(item : String, task_id : String) -> String {
       .to_string()
   }
   item
-}
-
-///| Re-execute tasks that need rework
-fn RalphLoop::rework_tasks(
-  self : RalphLoop,
-  milestone : @types.Milestone,
-  wave : Int,
-  feedback : Array[String],
-) -> Array[(String, String)] {
-  let tasks = self.milestone_manager.get_wave_tasks(milestone, wave)
-  self.rework_task_list(tasks, feedback)
-  collect_wave_results(tasks)
 }
 
 ///| Re-execute milestone tasks that need rework
@@ -563,20 +476,6 @@ fn find_backend(
   id : String,
 ) -> @agent.BoxedBackend? {
   backends.get(id)
-}
-
-fn collect_wave_results(
-  tasks : Array[@types.RalphTask],
-) -> Array[(String, String)] {
-  let results : Array[(String, String)] = []
-  for task in tasks {
-    let content = match task.result {
-      Some(r) => r
-      None => "(no output)"
-    }
-    results.push((task.id, content))
-  }
-  results
 }
 
 fn collect_all_task_results(

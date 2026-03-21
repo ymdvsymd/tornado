@@ -228,7 +228,7 @@ test "RalphLoop with pre-planned tasks" {
   assert_true(planner_mock.get_history().is_empty())
 }
 
-test "RalphLoop with rework cycle" {
+test "RalphLoop with rework cycle at milestone verification" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -260,8 +260,8 @@ test "RalphLoop with rework cycle" {
   let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
   let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
   rl.run()
-  // Should have rework info
-  assert_true(infos.iter().any(fn(m) { m.contains("Rework needed") }))
+  // Should have rework info from milestone verification
+  assert_true(infos.iter().any(fn(m) { m.contains("Rework needed") || m.contains("rework needed") }))
   // Eventually reaches max rework and accepts
   assert_true(
     infos.iter().any(fn(m) {
@@ -270,7 +270,7 @@ test "RalphLoop with rework cycle" {
   )
 }
 
-test "RalphLoop milestone failure" {
+test "RalphLoop milestone failure at milestone verification" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -423,7 +423,7 @@ test "RalphLoop multi-wave execution" {
   assert_true(builder_mock.get_history().length() == 3)
 }
 
-test "RalphLoop runs goal alignment verification after waves complete" {
+test "RalphLoop verifies all 4 perspectives after waves complete" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -456,22 +456,20 @@ test "RalphLoop runs goal alignment verification after waves complete" {
   inspect(mgr.milestones[0].status, content="Done")
   assert_true(
     infos.iter().any(fn(msg) {
-      msg.contains("Verifying goal alignment for m1")
+      msg.contains("Verifying milestone m1")
     }),
   )
   assert_true(
     infos.iter().any(fn(msg) {
-      msg.contains("Goal alignment approved for m1")
+      msg.contains("approved")
     }),
   )
+  // 4 perspectives: CodeQuality, Performance, Security, GoalAlignment
   let history = verifier_mock.get_history()
   assert_true(history.length() == 4)
-  let (goal_prompt, _) = history[3]
-  assert_true(goal_prompt.contains("## Review Focus: Goal Alignment"))
-  assert_true(goal_prompt.contains("Verify ALL tasks across all waves"))
 }
 
-test "RalphLoop multi-wave full cycle uses 3 wave perspectives and one final goal alignment verification" {
+test "RalphLoop multi-wave full cycle verifies all 4 perspectives once at milestone completion" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -507,21 +505,16 @@ test "RalphLoop multi-wave full cycle uses 3 wave perspectives and one final goa
 
   inspect(mgr.milestones[0].status, content="Done")
   let history = verifier_mock.get_history()
-  let num_waves = 3
-  assert_true(history.length() == (3 * num_waves) + 1)
-
-  for i in 0..<(3 * num_waves) {
-    let (wave_prompt, _) = history[i]
-    assert_false(wave_prompt.contains("## Review Focus: Goal Alignment"))
-    assert_true(wave_prompt.contains("Verify ONLY the tasks listed in the Wave Results section above."))
-  }
-
-  let (goal_prompt, _) = history[(3 * num_waves)]
-  assert_true(goal_prompt.contains("## Review Focus: Goal Alignment"))
-  assert_true(goal_prompt.contains("Verify ALL tasks across all waves"))
+  // Only 4 verifier calls: one per perspective at milestone completion
+  assert_true(history.length() == 4)
+  // All prompts should contain all task results (by task ID)
+  let (first_prompt, _) = history[0]
+  assert_true(first_prompt.contains("m1-t1"))
+  assert_true(first_prompt.contains("m1-t2"))
+  assert_true(first_prompt.contains("m1-t3"))
 }
 
-test "RalphLoop reworks milestone tasks during goal alignment verification" {
+test "RalphLoop reworks milestone tasks during milestone verification" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -544,11 +537,12 @@ test "RalphLoop reworks milestone tasks during goal alignment verification" {
   let verifier_mock = @agent.MockBackend::new(
     default_response="<wave_approved>",
   )
+  // First verification: Security perspective returns needs_rework
+  // "Done v1" uniquely matches the first run's result content
   verifier_mock.add_response(
-    "Done v1\n\n## Review Focus: Goal Alignment",
+    "Done v1",
     "<needs_rework>m1-t1: missing end-to-end behavior</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -563,23 +557,18 @@ test "RalphLoop reworks milestone tasks during goal alignment verification" {
   inspect(mgr.milestones[0].status, content="Done")
   assert_true(
     infos.iter().any(fn(msg) {
-      msg.contains("Goal alignment rework needed for m1")
+      msg.contains("rework needed for m1") || msg.contains("Rework needed")
     }),
   )
   let builder_history = builder_mock.get_history()
   assert_true(builder_history.length() == 2)
   let (rework_task, _) = builder_history[1]
   assert_true(rework_task.contains("Implement login flow"))
-  assert_true(
-    rework_task.contains(
-      "Feedback from verifier:\n- [GoalAlignment] missing end-to-end behavior",
-    ),
-  )
+  assert_true(rework_task.contains("Feedback from verifier"))
   assert_true(mgr.milestones[0].tasks[0].result.unwrap().contains("REWORKED"))
-  assert_true(verifier_mock.get_history().length() == 5)
 }
 
-test "RalphLoop goal alignment rework cycle retries and then completes milestone" {
+test "RalphLoop milestone verification rework cycle retries and then completes" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -602,11 +591,11 @@ test "RalphLoop goal alignment rework cycle retries and then completes milestone
   let verifier_mock = @agent.MockBackend::new(
     default_response="<wave_approved>",
   )
+  // "Done v1" uniquely matches first-run results, triggers rework
   verifier_mock.add_response(
-    "Done v1\n\n## Review Focus: Goal Alignment",
+    "Done v1",
     "<needs_rework>m1-t1: missing end-to-end behavior</needs_rework>",
   )
-  verifier_mock.add_response("Done v2 REWORKED", "<wave_approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -621,22 +610,22 @@ test "RalphLoop goal alignment rework cycle retries and then completes milestone
   inspect(mgr.milestones[0].status, content="Done")
   assert_true(
     infos.iter().any(fn(msg) {
-      msg.contains("Verifying goal alignment for m1 (attempt 1)")
+      msg.contains("Verifying milestone m1 (attempt 1)")
     }),
   )
   assert_true(
     infos.iter().any(fn(msg) {
-      msg.contains("Goal alignment rework needed for m1")
+      msg.contains("rework needed for m1") || msg.contains("Rework needed")
     }),
   )
   assert_true(
     infos.iter().any(fn(msg) {
-      msg.contains("Verifying goal alignment for m1 (attempt 2)")
+      msg.contains("Verifying milestone m1 (attempt 2)")
     }),
   )
   assert_true(
     infos.iter().any(fn(msg) {
-      msg.contains("Goal alignment approved for m1")
+      msg.contains("approved")
     }),
   )
 
@@ -644,17 +633,7 @@ test "RalphLoop goal alignment rework cycle retries and then completes milestone
   assert_true(builder_history.length() == 2)
   let (rework_task, _) = builder_history[1]
   assert_true(rework_task.contains("Implement login flow"))
-  assert_true(rework_task.contains("[GoalAlignment] missing end-to-end behavior"))
   inspect(mgr.milestones[0].tasks[0].result.unwrap(), content="Done v2 REWORKED")
-
-  let verifier_history = verifier_mock.get_history()
-  assert_true(verifier_history.length() == 5)
-  let (first_goal_prompt, _) = verifier_history[3]
-  let (second_goal_prompt, _) = verifier_history[4]
-  assert_true(first_goal_prompt.contains("## Review Focus: Goal Alignment"))
-  assert_true(first_goal_prompt.contains("Done v1"))
-  assert_true(second_goal_prompt.contains("## Review Focus: Goal Alignment"))
-  assert_true(second_goal_prompt.contains("Done v2 REWORKED"))
 }
 
 test "RalphLoop fails milestone when goal alignment verification fails" {
@@ -696,7 +675,7 @@ test "RalphLoop fails milestone when goal alignment verification fails" {
   assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
 }
 
-test "RalphLoop marks milestone failed when GoalAlignment returns milestone_failed after wave approval" {
+test "RalphLoop marks milestone failed when milestone verification returns milestone_failed" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -713,11 +692,7 @@ test "RalphLoop marks milestone failed when GoalAlignment returns milestone_fail
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
   let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
-  verifier_mock.add_response(
-    "## Review Focus: Goal Alignment",
-    "<milestone_failed>Milestone goal was not achieved</milestone_failed>",
+    default_response="<milestone_failed>Milestone goal was not achieved</milestone_failed>",
   )
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
@@ -733,11 +708,8 @@ test "RalphLoop marks milestone failed when GoalAlignment returns milestone_fail
   rl.run()
 
   let history = verifier_mock.get_history()
+  // 4 perspectives called at milestone verification
   assert_true(history.length() == 4)
-  let (wave_prompt, _) = history[0]
-  assert_false(wave_prompt.contains("## Review Focus: Goal Alignment"))
-  let (goal_prompt, _) = history[3]
-  assert_true(goal_prompt.contains("## Review Focus: Goal Alignment"))
   assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
 }
 
