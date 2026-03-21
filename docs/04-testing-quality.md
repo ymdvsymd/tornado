@@ -3,9 +3,9 @@
 ## エグゼクティブサマリー
 
 - **テストファイル数**: 16 (MoonBit 14 + TypeScript 2)
-- **テストケース総数**: 約216テストケース
+- **テストケース総数**: 289 (MoonBit 273 + Node.js 16)
 - **品質スコア**: 8.5/10
-- **最終更新**: 2026-03-20 (v0.6.0)
+- **最終更新**: 2026-03-22 (v0.9.1)
 
 ---
 
@@ -161,7 +161,7 @@ struct EventCollector {
 ### バージョン情報
 
 - `moon.mod.json`: 0.5.0 (MoonBit パッケージ)
-- `package.json`: 0.6.0 (npm パッケージ: @ymdvsymd/tornado)
+- `package.json`: 0.9.1 (npm パッケージ: @ymdvsymd/tornado)
 - 注: MoonBit パッケージと npm パッケージのバージョンが異なる
 
 ---

@@ -5,7 +5,7 @@
 ### 1.1 全モジュール構成（12パッケージ）
 
 ```
-mizchi/tornado (root)  ※ npm は @ymdvsymd/tornado v0.6.0
+mizchi/tornado (root)  ※ npm は @ymdvsymd/tornado v0.9.1
   types          (基本型定義、no import)
   config         (-> types)
   cli            (-> types, config)
@@ -335,6 +335,6 @@ git コンテキスト収集を単一ファイルに含む。`run_repl()` 関数
 
 両モジュールがタスク実行とリワークループを異なるアプローチで実装:
 - `orchestrator/`: `TaskManager` + `ReviewAgent`（3観点レビュー）
-- `ralph/`: `MilestoneManager` + `VerifierAgent`（Wave 単位検証）
+- `ralph/`: `MilestoneManager` + `VerifierAgent`（マイルストーン単位4観点並列検証, v0.9.0）
 
 実行・リワークのプリミティブを共有する余地がある。

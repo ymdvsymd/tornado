@@ -10,7 +10,7 @@ Tornado には2つの実行モードがある。
 | タスク生成     | 自動で次タスクを生成し続ける                       | 事前定義 or Planner が生成         |
 | エージェント   | Dev + Reviewer (2体)                               | Planner + Builder + Verifier (3体) |
 | 構造           | フラットなタスク列                                 | Milestone > Wave > Task の3層      |
-| レビュー       | 3観点レビュー (CodeQuality, Performance, Security) | Wave 単位の統合検証                |
+| レビュー       | 3観点レビュー (CodeQuality, Performance, Security) | マイルストーン単位の4観点検証（v0.9.0）|
 | フィードバック | Review の指摘を Dev に渡す                         | タスクID指定ルーティング（v0.6.0） |
 
 通常モードの詳細は [12. 通常モード (Heartbeat Loop) 詳細](#12-通常モード-heartbeat-loop-詳細) を参照。
@@ -183,7 +183,7 @@ tornado --ralph --config=my-config.json --dev=claude --review=codex --lang=ja
 | `review_dir`          | string  | `"docs/reviews"` | レビュー出力ディレクトリ                                        |
 | `ralph_enabled`       | bool    | `false`          | Ralph モード有効化（`--ralph` フラグで自動 `true`）             |
 | `milestones_path`     | string? | `null`           | マイルストーンファイルパス（省略時 `.tornado/milestones.json`） |
-| `max_rework_attempts` | int     | `3`              | Wave 単位のリワーク最大回数                                     |
+| `max_rework_attempts` | int     | `3`              | マイルストーン検証のリワーク最大回数                             |
 | `max_review_cycles`   | int     | `3`              | レビューサイクル上限（Ralph では未使用）                        |
 | `review_interval`     | int     | `1`              | レビュー間隔（Ralph では未使用）                                |
 | `agents`              | array   | `[]`             | エージェント設定の配列                                          |
@@ -401,26 +401,22 @@ Milestone (目標単位)
 
 ### Wave の役割
 
-Wave はコード上で以下の3つの機能を担っている:
+Wave はタスクの依存順序を表す。同一 Wave 内のタスクは並列実行される（v0.8.0）。
 
-**1. Verifier 検証のスコープ** (`ralph_loop.mbt:174-176`)
+**1. タスクの実行順序** (`ralph_loop.mbt`)
 
-Verifier は Wave 単位で呼ばれる。Milestone 全体ではなく、**その Wave のタスク結果だけ**が検証対象として渡される。これにより、問題の特定が容易になる。
+Wave 0 のタスクがすべて完了してから Wave 1 が実行される。同一 Wave 内のタスクは `@agent.run_parallel()` で並列実行される。
 
-**2. Rework のスコープ** (`ralph_loop.mbt:234`)
+**2. 検証のタイミング（v0.9.0 で変更）**
 
-再作業も Wave 内に閉じる。Wave 0 の rework が Wave 1 のタスクに波及しない。
-
-**3. 失敗時の早期中断（フェイルファスト）** (`ralph_loop.mbt:116-118`)
-
-Wave が失敗したら後続 Wave を実行せずに Milestone を失敗とする。Wave 0 が壊れている状態で Wave 1 のコストを払わずに済む。
+v0.8.0 までは Wave 単位で検証していたが、v0.9.0 で**マイルストーン単位の一括検証**に変更。全 Wave 完了後に 4 観点（CodeQuality, Performance, Security, GoalAlignment）を並列で1回だけ実行する。
 
 ```
-Wave 0 実行 → Wave 0 検証 → [失敗なら即中断]
-                           → [成功なら] Wave 1 実行 → Wave 1 検証 → ...
+Wave 0 並列実行 → Wave 1 並列実行 → ... → 全 Wave 完了
+→ マイルストーン検証 (4観点並列) → [NeedsRework なら rework → 再検証]
 ```
 
-つまり Wave の実質的な意義は **「検証と失敗の境界線」** であり、段階的な品質ゲートとして機能している。
+この変更により、3 Wave のマイルストーンで検証呼び出しが 10 回 → 4 回に削減された。トレードオフとして、Wave 0 の問題が Wave 2 完了まで検出されなくなる。
 
 ---
 
@@ -588,7 +584,7 @@ Verifier のフィードバックはタスクID指定でルーティングされ
 
 ### 8.3 Verifier エージェント
 
-**役割:** Wave の実行結果を検証する。
+**役割:** マイルストーンの全タスク結果を検証する（v0.9.0 で Wave 単位からマイルストーン単位に変更）。
 
 **入力プロンプト構造:**
 ```
@@ -1206,7 +1202,7 @@ Verifier にはまだ適用されていない。
 
 ### 14.9 その他
 
-- Wave 内タスクの順序実行: 同一 Wave 内のタスクは `for task in wave_tasks` で順序実行される。Wave の主な役割は検証スコープとフェイルファストの境界であり、並列化はコードベース上で意図されていない
+- Wave 内タスクの並列実行: 同一 Wave 内のタスクは `@agent.run_parallel()` で並列実行される（v0.8.0）。検証は全 Wave 完了後にマイルストーン単位で実行される（v0.9.0）
 - `review_interval` が Config で定義されるが Ralph では未使用
 - `current_wave` フィールドが resume 機能の準備か不明
 - プログレッシブなマイルストーン追加/削除は未対応

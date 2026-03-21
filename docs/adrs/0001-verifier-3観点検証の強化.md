@@ -147,3 +147,13 @@ graph TD
 | 並列実行基盤の追加複雑性 | `parallel-runner.mjs` は既存パターン（`spawnSync` + ラッパー）の延長。`Promise.all` による標準的な並列化 |
 | GoalAlignment の評価基準の曖昧さ | マイルストーン goal テキストに基づく明確な指示プロンプトで対処。評価基準を具体的に定義 |
 | Perspective tag format may conflict with task output | Tags use bracket format `[X]` distinct from XML tags used for verdict parsing |
+
+## 後続変更 (v0.9.0)
+
+v0.9.0 で検証タイミングが変更された:
+
+- **Before**: 各 Wave 完了後に 3 観点（CodeQuality, Performance, Security）で検証 + マイルストーン完了後に GoalAlignment
+- **After**: 全 Wave 完了後にマイルストーン単位で全 4 観点を一括検証
+
+理由: Wave 毎の検証が実行時間の 50% を占めていた。3 Wave のマイルストーンで 10 回の verifier 呼び出し → 4 回に削減。
+トレードオフ: 早期発見・早期修正ができなくなる（Wave 0 の問題が全 Wave 完了まで検出されない）。

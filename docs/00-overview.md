@@ -4,7 +4,7 @@
 **最終更新日**: 2026-03-20
 **調査手法**: 7つの専門エージェントによる並行多角的調査
 **リポジトリ**: https://github.com/ymdvsymd/tornado
-**バージョン**: 0.5.0 (MoonBit) / 0.6.0 (npm)
+**バージョン**: 0.9.1 (npm: @ymdvsymd/tornado)
 
 ---
 
