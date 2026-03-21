@@ -339,6 +339,35 @@ test "Orchestrator rework preserves review data across cycles" {
 }
 
 ///|
+test "Orchestrator run_task treats non-terminal agent status as failure" {
+  let config = make_test_config()
+  // AbortedMockBackend returns Aborted status for all calls (decompose + execute)
+  let aborted_backend = @agent.AbortedMockBackend::new()
+  let review_mock = @agent.MockBackend::new(default_response="<approved>")
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["dev-1"] = aborted_backend.boxed()
+  backends["review-1"] = review_mock.boxed()
+  let task_statuses : Array[String] = []
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = {
+    ..cb,
+    on_task_complete: fn(_tid, status) { task_statuses.push(status) },
+    on_info: fn(msg) { infos.push(msg) },
+  }
+  let orch = @orchestrator.Orchestrator::new(config, backends, callbacks)
+  let session = @types.Session::new("s1", "Build API", config.agents)
+  orch.run(session)
+  // Session still completes (reaches Finalizing)
+  inspect(session.status, content="Completed")
+  // Decomposition should have fallen back to single task (aborted backend returns non-empty "aborted")
+  // The task execution should have failed with "Unexpected agent status" message
+  assert_true(
+    task_statuses.iter().any(fn(s) { s.contains("failed: Unexpected agent status") }),
+  )
+}
+
+///|
 test "Orchestrator progress reports accurate completed count" {
   let config = make_test_config()
   let dev_mock = @agent.MockBackend::new(

@@ -180,7 +180,13 @@ fn Orchestrator::run_task(
           task.fail(err)
           (self.callbacks.on_task_complete)(task.id, "failed: \{err}")
         }
-        _ => ()
+        other => {
+          // Treat any non-terminal status (Idle, Running, Aborted) as failure
+          // to prevent tasks from being silently stuck in InProgress
+          let err = "Unexpected agent status: \{other}"
+          task.fail(err)
+          (self.callbacks.on_task_complete)(task.id, "failed: \{err}")
+        }
       }
     }
     None => {

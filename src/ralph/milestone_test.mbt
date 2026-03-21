@@ -378,3 +378,55 @@ test "milestone serialization roundtrip preserves failure reason" {
     _ => fail("Expected Failed task status after roundtrip")
   }
 }
+
+///|
+test "milestone serialization roundtrip preserves special characters" {
+  // Test that json_escape handles \n, \t, quotes via a milestone with special chars in goal
+  let mgr = @ralph.MilestoneManager::new()
+  let milestones : Array[@types.Milestone] = [
+    {
+      id: "m1",
+      goal: "Build \"auth\" with\nnewlines\tand\ttabs",
+      status: @types.MilestoneStatus::Pending,
+      tasks: [],
+      current_wave: 0,
+    },
+  ]
+  mgr.add_milestones(milestones)
+  // Serialize and reload
+  let serialized = mgr.to_json()
+  let mgr2 = @ralph.MilestoneManager::load_from_json(serialized)
+  inspect(
+    mgr2.milestones[0].goal,
+    content="Build \"auth\" with\nnewlines\tand\ttabs",
+  )
+}
+
+///|
+test "milestone serialization roundtrip with carriage return" {
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "test", "status": "failed",
+    #|      "failure_reason": "error with\r\nwindows newlines",
+    #|      "current_wave": 0,
+    #|      "tasks": []
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  match mgr.milestones[0].status {
+    @types.MilestoneStatus::Failed(reason) =>
+      assert_true(reason.contains("windows newlines"))
+    _ => fail("Expected Failed status")
+  }
+  // Roundtrip
+  let serialized = mgr.to_json()
+  let mgr2 = @ralph.MilestoneManager::load_from_json(serialized)
+  match mgr2.milestones[0].status {
+    @types.MilestoneStatus::Failed(reason) =>
+      assert_true(reason.contains("windows newlines"))
+    _ => fail("Expected Failed status after roundtrip")
+  }
+}

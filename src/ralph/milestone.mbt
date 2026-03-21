@@ -343,6 +343,7 @@ fn join_strings(parts : Array[String], sep : String) -> String {
 
 ///|
 fn json_escape(s : String) -> String {
+  let hex = "0123456789abcdef"
   let buf = StringBuilder::new()
   buf.write_char('"')
   for ch in s {
@@ -350,8 +351,19 @@ fn json_escape(s : String) -> String {
       '"' => buf.write_string("\\\"")
       '\\' => buf.write_string("\\\\")
       '\n' => buf.write_string("\\n")
+      '\r' => buf.write_string("\\r")
       '\t' => buf.write_string("\\t")
-      _ => buf.write_char(ch)
+      _ =>
+        if ch.to_int() < 0x20 {
+          // Escape control characters as \u00XX per RFC 8259
+          let code = ch.to_int()
+          let hex_chars = hex.to_array()
+          buf.write_string("\\u00")
+          buf.write_char(hex_chars[code / 16])
+          buf.write_char(hex_chars[code % 16])
+        } else {
+          buf.write_char(ch)
+        }
     }
   }
   buf.write_char('"')

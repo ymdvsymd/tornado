@@ -142,3 +142,50 @@ impl AgentBackend for FailingMockBackend with get_session_id(_self) {
 pub fn FailingMockBackend::boxed(self : FailingMockBackend) -> BoxedBackend {
   BoxedBackend::new(self)
 }
+
+///|
+/// AbortedMockBackend returns Aborted status (a non-terminal status)
+/// Used to test that callers handle unexpected agent statuses correctly
+pub struct AbortedMockBackend {
+  mut call_count : Int
+}
+
+///|
+/// Create a new AbortedMockBackend
+pub fn AbortedMockBackend::new() -> AbortedMockBackend {
+  { call_count: 0 }
+}
+
+///|
+impl AgentBackend for AbortedMockBackend with run(
+  self,
+  _task,
+  _system_prompt,
+  on_output,
+) {
+  self.call_count += 1
+  on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Running))
+  on_output(@types.AgentEvent::StatusChange(@types.AgentStatus::Aborted))
+  { content: "aborted", status: @types.AgentStatus::Aborted, error: None }
+}
+
+///|
+impl AgentBackend for AbortedMockBackend with name(_self) {
+  "aborted-mock"
+}
+
+///|
+impl AgentBackend for AbortedMockBackend with set_session_id(_self, _sid) {
+
+}
+
+///|
+impl AgentBackend for AbortedMockBackend with get_session_id(_self) {
+  ""
+}
+
+///|
+/// Wrap in BoxedBackend for dynamic dispatch
+pub fn AbortedMockBackend::boxed(self : AbortedMockBackend) -> BoxedBackend {
+  BoxedBackend::new(self)
+}
