@@ -1,5 +1,5 @@
 ///|
-fn make_ralph_config(ralph_enabled? : Bool = true) -> @config.ProjectConfig {
+fn make_ralph_config() -> @config.ProjectConfig {
   let planner_agent : @types.AgentConfig = {
     id: "planner",
     kind: Mock,
@@ -23,7 +23,6 @@ fn make_ralph_config(ralph_enabled? : Bool = true) -> @config.ProjectConfig {
     review_interval: 1,
     agents: [planner_agent, builder_agent, verifier_agent],
     parse_warnings: [],
-    ralph_enabled,
     milestones_path: None,
     max_rework_attempts: 3,
   }
@@ -564,7 +563,6 @@ test "RalphLoop without verifier auto-approves" {
     review_interval: 1,
     agents: [planner_agent, builder_agent],
     parse_warnings: [],
-    ralph_enabled: true,
     milestones_path: None,
     max_rework_attempts: 3,
   }
@@ -1534,7 +1532,6 @@ test "verify_milestone reaches max rework attempts and accepts as-is" {
     review_interval: 1,
     agents: [planner_agent, builder_agent, verifier_agent],
     parse_warnings: [],
-    ralph_enabled: true,
     milestones_path: None,
     max_rework_attempts: 2,
   }
@@ -1668,7 +1665,6 @@ test "run_wave returns false when no builder backend is available" {
     review_interval: 1,
     agents: [planner_agent, verifier_agent],
     parse_warnings: [],
-    ralph_enabled: true,
     milestones_path: None,
     max_rework_attempts: 3,
   }

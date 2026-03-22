@@ -5,7 +5,6 @@ pub(all) struct ProjectConfig {
   review_interval : Int
   agents : Array[@types.AgentConfig]
   parse_warnings : Array[String]
-  ralph_enabled : Bool
   milestones_path : String?
   max_rework_attempts : Int
 }
@@ -94,7 +93,6 @@ pub fn ProjectConfig::from_json(json : Json) -> ProjectConfig raise Failure {
           }
         _ => ()
       }
-      let ralph_enabled = @util.get_bool(json, "ralph_enabled", false)
       let milestones_path = @util.get_string_opt(json, "milestones_path")
       let max_rework_attempts = @util.get_int(json, "max_rework_attempts", 3)
       {
@@ -102,7 +100,6 @@ pub fn ProjectConfig::from_json(json : Json) -> ProjectConfig raise Failure {
         review_interval,
         agents,
         parse_warnings,
-        ralph_enabled,
         milestones_path,
         max_rework_attempts,
       }
@@ -119,7 +116,6 @@ pub fn ProjectConfig::default() -> ProjectConfig {
     review_interval: 1,
     agents: [],
     parse_warnings: [],
-    ralph_enabled: false,
     milestones_path: None,
     max_rework_attempts: 3,
   }
@@ -145,7 +141,6 @@ pub fn ProjectConfig::preset_default() -> ProjectConfig {
     review_interval: 1,
     agents: [dev, reviewer],
     parse_warnings: [],
-    ralph_enabled: false,
     milestones_path: None,
     max_rework_attempts: 3,
   }
@@ -177,7 +172,6 @@ pub fn ProjectConfig::preset_ralph() -> ProjectConfig {
     review_interval: 1,
     agents: [planner, builder, verifier],
     parse_warnings: [],
-    ralph_enabled: true,
     milestones_path: None,
     max_rework_attempts: 3,
   }
@@ -212,12 +206,10 @@ pub fn ProjectConfig::validate(self : ProjectConfig) -> Array[String] {
   if not(has_builder) && not(self.agents.is_empty()) {
     errors.push("No builder agent configured")
   }
-  // Ralph-specific validation
-  if self.ralph_enabled {
-    let has_planner = self.agents.iter().any(fn(a) { a.role == Planner })
-    if not(has_planner) {
-      errors.push("Ralph mode requires a planner agent")
-    }
+  // Planner is required
+  let has_planner = self.agents.iter().any(fn(a) { a.role == Planner })
+  if not(has_planner) && not(self.agents.is_empty()) {
+    errors.push("No planner agent configured")
   }
   errors
 }

@@ -2,8 +2,10 @@
 pub(all) enum CliCommand {
   Run(
     config_path~ : String?,
-    dev_kind~ : @types.AgentKind?,
-    review_kind~ : @types.AgentKind?,
+    planner_kind~ : @types.AgentKind?,
+    builder_kind~ : @types.AgentKind?,
+    verifier_kind~ : @types.AgentKind?,
+    milestones_path~ : String?,
     lang~ : String?,
     log_path~ : String?,
     warnings~ : Array[String]
@@ -24,8 +26,10 @@ pub fn parse_cli_args(
   if args.length() < 2 {
     return Run(
       config_path=None,
-      dev_kind=None,
-      review_kind=None,
+      planner_kind=None,
+      builder_kind=None,
+      verifier_kind=None,
+      milestones_path=None,
       lang=None,
       log_path=None,
       warnings=[],
@@ -47,23 +51,28 @@ pub fn parse_cli_args(
 }
 
 ///|
-/// Apply --dev/--review kind overrides and --review-interval to config.
+/// Apply role-specific kind overrides to config.
 pub fn apply_overrides(
   config : @config.ProjectConfig,
-  dev_kind? : @types.AgentKind? = None,
-  review_kind? : @types.AgentKind? = None,
-  review_interval? : Int? = None,
+  planner_kind? : @types.AgentKind? = None,
+  builder_kind? : @types.AgentKind? = None,
+  verifier_kind? : @types.AgentKind? = None,
 ) -> @config.ProjectConfig {
   let agents : Array[@types.AgentConfig] = []
   for agent in config.agents {
     let kind = match agent.role {
-      Builder =>
-        match dev_kind {
+      Planner =>
+        match planner_kind {
           Some(k) => k
           None => agent.kind
         }
-      Review =>
-        match review_kind {
+      Builder =>
+        match builder_kind {
+          Some(k) => k
+          None => agent.kind
+        }
+      Verifier =>
+        match verifier_kind {
           Some(k) => k
           None => agent.kind
         }
@@ -71,19 +80,7 @@ pub fn apply_overrides(
     }
     agents.push({ id: agent.id, kind, role: agent.role, model: agent.model })
   }
-  let ri = match review_interval {
-    Some(n) => n
-    None => config.review_interval
-  }
-  {
-    max_review_cycles: config.max_review_cycles,
-    review_interval: ri,
-    agents,
-    parse_warnings: config.parse_warnings,
-    ralph_enabled: config.ralph_enabled,
-    milestones_path: config.milestones_path,
-    max_rework_attempts: config.max_rework_attempts,
-  }
+  { ..config, agents, }
 }
 
 ///|
@@ -102,8 +99,10 @@ fn parse_run_args(
   _file_exists : (String) -> Bool,
 ) -> CliCommand {
   let mut config_path : String? = None
-  let mut dev_kind : @types.AgentKind? = None
-  let mut review_kind : @types.AgentKind? = None
+  let mut planner_kind : @types.AgentKind? = None
+  let mut builder_kind : @types.AgentKind? = None
+  let mut verifier_kind : @types.AgentKind? = None
+  let mut milestones_path : String? = None
   let mut lang : String? = None
   let mut log_path : String? = None
   let warnings : Array[String] = []
@@ -112,30 +111,53 @@ fn parse_run_args(
   let len = args.length()
   while i < len {
     let token = args[i]
-    if token.has_prefix("--dev=") {
-      let raw = token.view(start_offset="--dev=".length()).to_string()
+    if token.has_prefix("--planner=") {
+      let raw = token.view(start_offset="--planner=".length()).to_string()
       match parse_kind_alias(raw) {
-        Some(kind) => dev_kind = Some(kind)
-        None => warnings.push("Unknown --dev kind: \{raw}")
+        Some(kind) => planner_kind = Some(kind)
+        None => warnings.push("Unknown --planner kind: \{raw}")
       }
       i += 1
       continue
     }
 
-    if token.has_prefix("--review=") {
-      let raw = token.view(start_offset="--review=".length()).to_string()
+    if token.has_prefix("--builder=") {
+      let raw = token.view(start_offset="--builder=".length()).to_string()
       match parse_kind_alias(raw) {
-        Some(kind) => review_kind = Some(kind)
-        None => warnings.push("Unknown --review kind: \{raw}")
+        Some(kind) => builder_kind = Some(kind)
+        None => warnings.push("Unknown --builder kind: \{raw}")
       }
       i += 1
       continue
     }
 
-    // Legacy flags: --review-interval, --rlm, --ralph are ignored (repl mode removed)
+    if token.has_prefix("--verifier=") {
+      let raw = token.view(start_offset="--verifier=".length()).to_string()
+      match parse_kind_alias(raw) {
+        Some(kind) => verifier_kind = Some(kind)
+        None => warnings.push("Unknown --verifier kind: \{raw}")
+      }
+      i += 1
+      continue
+    }
+
+    if token.has_prefix("--milestones=") {
+      let path = token.view(start_offset="--milestones=".length()).to_string()
+      if path.is_empty() {
+        warnings.push("Missing value for --milestones")
+      } else {
+        milestones_path = Some(path)
+      }
+      i += 1
+      continue
+    }
+
+    // Legacy flags are silently ignored
     if token.has_prefix("--review-interval=") ||
       token == "--rlm" ||
-      token == "--ralph" {
+      token == "--ralph" ||
+      token.has_prefix("--dev=") ||
+      token.has_prefix("--review=") {
       i += 1
       continue
     }
@@ -216,7 +238,16 @@ fn parse_run_args(
     i += 1
   }
 
-  Run(config_path~, dev_kind~, review_kind~, lang~, log_path~, warnings~)
+  Run(
+    config_path~,
+    planner_kind~,
+    builder_kind~,
+    verifier_kind~,
+    milestones_path~,
+    lang~,
+    log_path~,
+    warnings~,
+  )
 }
 
 ///|

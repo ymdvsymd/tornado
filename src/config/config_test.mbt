@@ -62,6 +62,7 @@ test "ProjectConfig::validate passes with valid config" {
   let json =
     #|{
     #|  "agents": [
+    #|    { "id": "p1", "kind": "claude-code", "role": "planner" },
     #|    { "id": "dev-1", "kind": "claude-code", "role": "dev" }
     #|  ]
     #|}
@@ -189,6 +190,7 @@ test "valid config parse_warnings is empty" {
   let json =
     #|{
     #|  "agents": [
+    #|    { "id": "p1", "kind": "claude-code", "role": "planner" },
     #|    { "id": "dev-1", "kind": "claude-code", "role": "dev" }
     #|  ]
     #|}
@@ -216,10 +218,9 @@ test "parse planner and verifier roles" {
 }
 
 ///|
-test "parse ralph_enabled and milestones_path" {
+test "parse milestones_path and max_rework_attempts" {
   let json =
     #|{
-    #|  "ralph_enabled": true,
     #|  "milestones_path": ".tornado/milestones.json",
     #|  "max_rework_attempts": 5,
     #|  "agents": [
@@ -228,13 +229,13 @@ test "parse ralph_enabled and milestones_path" {
     #|  ]
     #|}
   let config = @config.ProjectConfig::from_json_string(json)
-  assert_true(config.ralph_enabled)
+
   inspect(config.milestones_path, content="Some(\".tornado/milestones.json\")")
   inspect(config.max_rework_attempts, content="5")
 }
 
 ///|
-test "ralph_enabled defaults to false" {
+test "milestones_path defaults to None" {
   let json =
     #|{
     #|  "agents": [
@@ -242,16 +243,15 @@ test "ralph_enabled defaults to false" {
     #|  ]
     #|}
   let config = @config.ProjectConfig::from_json_string(json)
-  assert_true(not(config.ralph_enabled))
+
   inspect(config.milestones_path, content="None")
   inspect(config.max_rework_attempts, content="3")
 }
 
 ///|
-test "validate ralph requires planner" {
+test "validate requires planner" {
   let json =
     #|{
-    #|  "ralph_enabled": true,
     #|  "agents": [
     #|    { "id": "dev-1", "kind": "claude-code", "role": "dev" }
     #|  ]
@@ -262,10 +262,9 @@ test "validate ralph requires planner" {
 }
 
 ///|
-test "validate ralph with planner and dev passes" {
+test "validate with planner and builder passes" {
   let json =
     #|{
-    #|  "ralph_enabled": true,
     #|  "agents": [
     #|    { "id": "p1", "kind": "claude-code", "role": "planner" },
     #|    { "id": "b1", "kind": "claude-code", "role": "dev" }
@@ -279,7 +278,7 @@ test "validate ralph with planner and dev passes" {
 ///|
 test "ProjectConfig::preset_ralph" {
   let config = @config.ProjectConfig::preset_ralph()
-  assert_true(config.ralph_enabled)
+
   assert_true(config.agents.length() == 3)
   inspect(config.agents[0].role, content="Planner")
   inspect(config.agents[1].role, content="Builder")

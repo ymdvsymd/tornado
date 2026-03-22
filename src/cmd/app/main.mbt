@@ -22,8 +22,10 @@ fn main {
   match command {
     @cli.CliCommand::Run(
       config_path~,
-      dev_kind~,
-      review_kind~,
+      planner_kind~,
+      builder_kind~,
+      verifier_kind~,
+      milestones_path=cli_milestones,
       log_path~,
       lang=cli_lang,
       warnings~
@@ -36,7 +38,9 @@ fn main {
         Some(path) => set_log_file(path)
         None => ()
       }
-      run_ralph(config_path, lang, dev_kind, review_kind)
+      run_ralph(
+        config_path, lang, planner_kind, builder_kind, verifier_kind, cli_milestones,
+      )
     }
     @cli.CliCommand::Validate(path) =>
       match path {
@@ -53,15 +57,20 @@ fn print_usage() -> Unit {
   println("tornado - milestone-based autonomous development orchestrator")
   println("")
   println("Usage:")
-  println("  tornado [--config=tornado.json] [--dev=codex] [--review=claude]")
+  println(
+    "  tornado [--planner=claude-code] [--builder=codex] [--verifier=claude-code]",
+  )
+  println("  tornado --config=tornado.json")
   println("  tornado validate <config>  # validate config file")
   println("")
-  println("Agent kind options: claude | claude-code | codex | api | mock")
+  println("Agent kind options: claude | claude-code | codex | mock")
   println("")
   println("Options:")
   println("  --config=<path>      Config file path (default: preset)")
-  println("  --dev=<kind>         Override builder agent kind")
-  println("  --review=<kind>      Override review agent kind")
+  println("  --planner=<kind>     Planner agent kind (default: claude-code)")
+  println("  --builder=<kind>     Builder agent kind (default: claude-code)")
+  println("  --verifier=<kind>    Verifier agent kind (default: codex)")
+  println("  --milestones=<path>  Milestones file path")
   println(
     "  --lang=auto|ja|en    Review language (default: auto, detected from LANG env)",
   )
@@ -78,8 +87,10 @@ fn print_usage() -> Unit {
 fn run_ralph(
   config_path : String?,
   lang : String,
-  dev_kind : @types.AgentKind?,
-  review_kind : @types.AgentKind?,
+  planner_kind : @types.AgentKind?,
+  builder_kind : @types.AgentKind?,
+  verifier_kind : @types.AgentKind?,
+  cli_milestones : String?,
 ) -> Unit {
   log("INFO", "Starting ralph loop mode...")
   // Load or create config
@@ -92,11 +103,7 @@ fn run_ralph(
         }
         Ok(c) => c
       }
-      try {
-        let parsed = @config.ProjectConfig::from_json_string(content)
-        // Apply ralph_enabled override
-        { ..parsed, ralph_enabled: true }
-      } catch {
+      @config.ProjectConfig::from_json_string(content) catch {
         err => {
           log("ERROR", "Failed to parse config: \{err}")
           return
@@ -106,9 +113,17 @@ fn run_ralph(
     None => @config.ProjectConfig::preset_ralph()
   }
   // Apply kind overrides
-  let config = @cli.apply_overrides(config, dev_kind~, review_kind~)
-  // Ensure ralph_enabled is preserved after overrides
-  let config : @config.ProjectConfig = { ..config, ralph_enabled: true }
+  let config = @cli.apply_overrides(
+    config,
+    planner_kind~,
+    builder_kind~,
+    verifier_kind~,
+  )
+  // Apply CLI milestones path override
+  let config : @config.ProjectConfig = match cli_milestones {
+    Some(path) => { ..config, milestones_path: Some(path) }
+    None => config
+  }
   // Validate config
   let errors = config.validate()
   if not(errors.is_empty()) {

@@ -4,21 +4,27 @@ fn file_exists_mock(path : String) -> Bool {
 }
 
 ///|
-test "parse_cli_args flags only" {
-  let args = ["tornado", "--dev=codex", "--review=claude"]
+test "parse_cli_args role-specific kind flags" {
+  let args = [
+    "tornado", "--planner=claude-code", "--builder=codex", "--verifier=mock",
+  ]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(
       config_path=config,
-      log_path=_,
-      dev_kind=dev,
-      review_kind=review,
+      planner_kind~,
+      builder_kind~,
+      verifier_kind~,
+      milestones_path~,
       lang~,
-      warnings~
+      warnings~,
+      ..
     ) => {
       inspect(config, content="None")
-      inspect(dev, content="Some(Codex)")
-      inspect(review, content="Some(ClaudeCode)")
+      inspect(planner_kind, content="Some(ClaudeCode)")
+      inspect(builder_kind, content="Some(Codex)")
+      inspect(verifier_kind, content="Some(Mock)")
+      inspect(milestones_path, content="None")
       inspect(lang, content="None")
       assert_true(warnings.is_empty())
     }
@@ -28,20 +34,12 @@ test "parse_cli_args flags only" {
 
 ///|
 test "parse_cli_args supports --config=value" {
-  let args = ["tornado", "--config=config.json", "--review=codex"]
+  let args = ["tornado", "--config=config.json", "--builder=codex"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=config,
-      log_path=_,
-      dev_kind=dev,
-      review_kind=review,
-      lang=_,
-      warnings~
-    ) => {
+    Run(config_path=config, builder_kind~, warnings~, ..) => {
       inspect(config, content="Some(\"config.json\")")
-      inspect(dev, content="None")
-      inspect(review, content="Some(Codex)")
+      inspect(builder_kind, content="Some(Codex)")
       assert_true(warnings.is_empty())
     }
     _ => panic()
@@ -50,20 +48,24 @@ test "parse_cli_args supports --config=value" {
 
 ///|
 test "parse_cli_args supports --config <value>" {
-  let args = ["tornado", "--config", "config.json", "--review=codex"]
+  let args = ["tornado", "--config", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=config,
-      log_path=_,
-      dev_kind=dev,
-      review_kind=review,
-      lang=_,
-      warnings~
-    ) => {
+    Run(config_path=config, warnings~, ..) => {
       inspect(config, content="Some(\"config.json\")")
-      inspect(dev, content="None")
-      inspect(review, content="Some(Codex)")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --milestones=path" {
+  let args = ["tornado", "--milestones=.tornado/milestones.json"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(milestones_path~, warnings~, ..) => {
+      inspect(milestones_path, content="Some(\".tornado/milestones.json\")")
       assert_true(warnings.is_empty())
     }
     _ => panic()
@@ -151,8 +153,7 @@ test "parse_cli_args positional argument warns" {
   let args = ["tornado", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(config_path=config, warnings~, ..) => {
-      inspect(config, content="None")
+    Run(warnings~, ..) => {
       assert_true(warnings.length() == 1)
       assert_true(warnings[0].contains("Unexpected argument"))
     }
@@ -163,52 +164,22 @@ test "parse_cli_args positional argument warns" {
 ///|
 test "parse_cli_args legacy flags silently ignored" {
   let args = [
-    "tornado", "--ralph", "--rlm", "--review-interval=3", "--dev=codex",
+    "tornado", "--ralph", "--rlm", "--review-interval=3", "--dev=codex", "--review=claude",
   ]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(dev_kind=dev, warnings~, ..) => {
-      inspect(dev, content="Some(Codex)")
-      assert_true(warnings.is_empty())
-    }
+    Run(warnings~, ..) => assert_true(warnings.is_empty())
     _ => panic()
   }
 }
 
 ///|
 test "parse_cli_args --lang=ja" {
-  let args = ["tornado", "--lang=ja", "--dev=codex"]
+  let args = ["tornado", "--lang=ja"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(dev_kind=dev, lang~, warnings~, ..) => {
-      inspect(dev, content="Some(Codex)")
+    Run(lang~, warnings~, ..) => {
       inspect(lang, content="Some(\"ja\")")
-      assert_true(warnings.is_empty())
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args --lang=en" {
-  let args = ["tornado", "--lang=en"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(lang~, warnings~, ..) => {
-      inspect(lang, content="Some(\"en\")")
-      assert_true(warnings.is_empty())
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args --lang=auto" {
-  let args = ["tornado", "--lang=auto"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(lang~, warnings~, ..) => {
-      inspect(lang, content="Some(\"auto\")")
       assert_true(warnings.is_empty())
     }
     _ => panic()
@@ -231,31 +202,37 @@ test "parse_cli_args --lang=invalid warns" {
 
 ///|
 test "apply_overrides rewrites role kinds" {
-  let base = @config.ProjectConfig::preset_default()
+  let base = @config.ProjectConfig::preset_ralph()
   let updated = @cli.apply_overrides(
     base,
-    dev_kind=Some(@types.AgentKind::Codex),
-    review_kind=Some(@types.AgentKind::ClaudeCode),
+    planner_kind=Some(@types.AgentKind::Mock),
+    builder_kind=Some(@types.AgentKind::Codex),
+    verifier_kind=Some(@types.AgentKind::ClaudeCode),
   )
 
-  assert_true(updated.agents.length() == 2)
-  inspect(updated.agents[0].role, content="Builder")
-  inspect(updated.agents[0].kind, content="Codex")
-  inspect(updated.agents[1].role, content="Review")
-  inspect(updated.agents[1].kind, content="ClaudeCode")
+  assert_true(updated.agents.length() == 3)
+  inspect(updated.agents[0].role, content="Planner")
+  inspect(updated.agents[0].kind, content="Mock")
+  inspect(updated.agents[1].role, content="Builder")
+  inspect(updated.agents[1].kind, content="Codex")
+  inspect(updated.agents[2].role, content="Verifier")
+  inspect(updated.agents[2].kind, content="ClaudeCode")
 }
 
 ///|
-test "apply_overrides overrides review_interval" {
-  let base = @config.ProjectConfig::preset_default()
-  inspect(base.review_interval, content="1")
-  let updated = @cli.apply_overrides(base, review_interval=Some(3))
-  inspect(updated.review_interval, content="3")
-}
-
-///|
-test "apply_overrides keeps review_interval when not overridden" {
-  let base = @config.ProjectConfig::preset_default()
+test "apply_overrides keeps kinds when not overridden" {
+  let base = @config.ProjectConfig::preset_ralph()
   let updated = @cli.apply_overrides(base)
-  inspect(updated.review_interval, content="1")
+  inspect(updated.agents[0].kind, content="ClaudeCode")
+  inspect(updated.agents[1].kind, content="ClaudeCode")
+  inspect(updated.agents[2].kind, content="Codex")
+}
+
+///|
+test "ProjectConfig::preset_ralph" {
+  let config = @config.ProjectConfig::preset_ralph()
+  assert_true(config.agents.length() == 3)
+  inspect(config.agents[0].role, content="Planner")
+  inspect(config.agents[1].role, content="Builder")
+  inspect(config.agents[2].role, content="Verifier")
 }
