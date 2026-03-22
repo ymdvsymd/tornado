@@ -1,0 +1,50 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/tornado/cmd/helpers"
+
+// Values
+pub fn build_cycle_summary(Int, Array[String], String) -> String
+
+pub fn build_improvement_task(String, Int, Int, String, String) -> String
+
+pub fn build_plan_file_task(String, String, String) -> String
+
+pub fn derive_archive_path(String) -> String
+
+pub fn extract_event_ts(String, () -> String) -> (String, String)
+
+pub fn find_agent_id(Array[SimpleAgent], String) -> String?
+
+pub fn join_dev_outputs(Array[String]) -> String
+
+pub fn resolve_lang(String?, () -> String) -> String
+
+pub fn session_from_json(String) -> SessionState?
+
+pub fn session_to_json(SessionState) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct SessionState {
+  iteration : Int
+  phase : String
+  task : String
+  dev_output : String
+  review_summary : String
+  agent_sessions : Map[String, String]
+  dev_since_review : Int
+  accumulated_dev_outputs : Array[String]
+}
+pub impl Show for SessionState
+
+pub(all) struct SimpleAgent {
+  id : String
+  kind : String
+  role : String
+}
+pub impl Show for SimpleAgent
+
+// Type aliases
+
+// Traits
+
