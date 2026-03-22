@@ -51,15 +51,14 @@ pub fn MilestoneManager::load_from_json(
 ///|
 /// Serialize milestones to JSON string
 pub fn MilestoneManager::to_json(self : MilestoneManager) -> String {
-  let parts : Array[String] = []
+  let obj : Map[String, Json] = {}
+  obj["brief"] = self.brief.to_json()
+  let milestone_arr : Array[Json] = []
   for m in self.milestones {
-    parts.push(milestone_to_json(m))
+    milestone_arr.push(milestone_to_json_value(m))
   }
-  "{\"brief\":" +
-  json_escape(self.brief) +
-  ",\"milestones\":[" +
-  join_strings(parts, ",") +
-  "]}"
+  obj["milestones"] = Json::array(milestone_arr)
+  Json::object(obj).stringify()
 }
 
 ///|
@@ -170,62 +169,51 @@ fn parse_ralph_task(json : Json) -> @types.RalphTask {
 }
 
 ///|
-fn milestone_to_json(m : @types.Milestone) -> String {
+fn milestone_to_json_value(m : @types.Milestone) -> Json {
   let status_str = match m.status {
     Pending => "pending"
     InProgress => "in_progress"
     Done => "done"
     Failed(_) => "failed"
   }
-  let task_parts : Array[String] = []
+  let task_arr : Array[Json] = []
   for t in m.tasks {
-    task_parts.push(ralph_task_to_json(t))
+    task_arr.push(ralph_task_to_json_value(t))
   }
-  let tasks_json = "[" + join_strings(task_parts, ",") + "]"
-  "{\"id\":" +
-  json_escape(m.id) +
-  ",\"goal\":" +
-  json_escape(m.goal) +
-  ",\"status\":\"" +
-  status_str +
-  "\",\"current_wave\":" +
-  m.current_wave.to_string() +
-  ",\"tasks\":" +
-  tasks_json +
-  ",\"summary\":" +
-  json_escape(m.summary) +
-  "}"
+  let obj : Map[String, Json] = {}
+  obj["id"] = m.id.to_json()
+  obj["goal"] = m.goal.to_json()
+  obj["status"] = status_str.to_json()
+  obj["current_wave"] = m.current_wave.to_json()
+  obj["tasks"] = Json::array(task_arr)
+  obj["summary"] = m.summary.to_json()
+  Json::object(obj)
 }
 
 ///|
-fn ralph_task_to_json(t : @types.RalphTask) -> String {
+fn ralph_task_to_json_value(t : @types.RalphTask) -> Json {
   let status_str = match t.status {
     Pending => "pending"
     InProgress(_) => "in_progress"
     Done => "done"
     Failed(_) => "failed"
   }
-  let result_json = match t.result {
-    Some(s) => json_escape(s)
-    None => "null"
+  let result_json : Json = match t.result {
+    Some(s) => s.to_json()
+    None => Json::null()
   }
-  let plan_doc_json = match t.plan_doc {
-    Some(s) => json_escape(s)
-    None => "null"
+  let plan_doc_json : Json = match t.plan_doc {
+    Some(s) => s.to_json()
+    None => Json::null()
   }
-  "{\"id\":" +
-  json_escape(t.id) +
-  ",\"description\":" +
-  json_escape(t.description) +
-  ",\"wave\":" +
-  t.wave.to_string() +
-  ",\"status\":\"" +
-  status_str +
-  "\",\"result\":" +
-  result_json +
-  ",\"plan_doc\":" +
-  plan_doc_json +
-  "}"
+  let obj : Map[String, Json] = {}
+  obj["id"] = t.id.to_json()
+  obj["description"] = t.description.to_json()
+  obj["wave"] = t.wave.to_json()
+  obj["status"] = status_str.to_json()
+  obj["result"] = result_json
+  obj["plan_doc"] = plan_doc_json
+  Json::object(obj)
 }
 
 ///|
@@ -237,23 +225,6 @@ fn join_strings(parts : Array[String], sep : String) -> String {
     }
     buf.write_string(part)
   }
-  buf.to_string()
-}
-
-///|
-fn json_escape(s : String) -> String {
-  let buf = StringBuilder::new()
-  buf.write_char('"')
-  for ch in s {
-    match ch {
-      '"' => buf.write_string("\\\"")
-      '\\' => buf.write_string("\\\\")
-      '\n' => buf.write_string("\\n")
-      '\t' => buf.write_string("\\t")
-      _ => buf.write_char(ch)
-    }
-  }
-  buf.write_char('"')
   buf.to_string()
 }
 
