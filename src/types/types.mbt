@@ -22,7 +22,6 @@ pub(all) enum AgentStatus {
   Running
   Completed
   Failed(String)
-  Aborted
 } derive(Eq, Show)
 
 ///|

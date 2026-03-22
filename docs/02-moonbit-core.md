@@ -9,7 +9,7 @@
 **エージェント関連:**
 - `AgentKind` (enum): ClaudeCode | Codex | Api | Mock
 - `AgentRole` (enum): Dev | Review | Orchestrator | Planner | Verifier
-- `AgentStatus` (enum): Idle | Running | Completed | Failed(String) | Aborted
+- `AgentStatus` (enum): Idle | Running | Completed | Failed(String)
 - `AgentConfig` (struct): id, kind, role, model, system_prompt, working_dir, max_iterations
 
 **タスク・セッション:**
