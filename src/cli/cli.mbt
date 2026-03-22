@@ -2,12 +2,8 @@
 pub(all) enum CliCommand {
   Run(
     config_path~ : String?,
-    plan_path~ : String?,
     dev_kind~ : @types.AgentKind?,
     review_kind~ : @types.AgentKind?,
-    review_interval~ : Int?,
-    rlm~ : Bool,
-    ralph~ : Bool,
     lang~ : String?,
     log_path~ : String?,
     warnings~ : Array[String]
@@ -28,12 +24,8 @@ pub fn parse_cli_args(
   if args.length() < 2 {
     return Run(
       config_path=None,
-      plan_path=None,
       dev_kind=None,
       review_kind=None,
-      review_interval=None,
-      rlm=false,
-      ralph=false,
       lang=None,
       log_path=None,
       warnings=[],
@@ -107,15 +99,11 @@ pub fn kind_name(kind : @types.AgentKind) -> String {
 ///|
 fn parse_run_args(
   args : Array[String],
-  file_exists : (String) -> Bool,
+  _file_exists : (String) -> Bool,
 ) -> CliCommand {
   let mut config_path : String? = None
-  let mut plan_path : String? = None
   let mut dev_kind : @types.AgentKind? = None
   let mut review_kind : @types.AgentKind? = None
-  let mut review_interval : Int? = None
-  let mut rlm : Bool = false
-  let mut ralph : Bool = false
   let mut lang : String? = None
   let mut log_path : String? = None
   let warnings : Array[String] = []
@@ -144,26 +132,10 @@ fn parse_run_args(
       continue
     }
 
-    if token.has_prefix("--review-interval=") {
-      let raw = token
-        .view(start_offset="--review-interval=".length())
-        .to_string()
-      match parse_positive_int(raw) {
-        Some(n) => review_interval = Some(n)
-        None => warnings.push("Invalid --review-interval value: \{raw}")
-      }
-      i += 1
-      continue
-    }
-
-    if token == "--rlm" {
-      rlm = true
-      i += 1
-      continue
-    }
-
-    if token == "--ralph" {
-      ralph = true
+    // Legacy flags: --review-interval, --rlm, --ralph are ignored (repl mode removed)
+    if token.has_prefix("--review-interval=") ||
+      token == "--rlm" ||
+      token == "--ralph" {
       i += 1
       continue
     }
@@ -240,33 +212,11 @@ fn parse_run_args(
       continue
     }
 
-    // First positional file is treated as plan path.
-    if plan_path is None {
-      if file_exists(token) {
-        plan_path = Some(token)
-      } else {
-        warnings.push(
-          "Positional argument must be an existing plan file: \{token} (use --config=<path> for config)",
-        )
-      }
-    } else {
-      warnings.push("Unexpected argument: \{token}")
-    }
+    warnings.push("Unexpected argument: \{token}")
     i += 1
   }
 
-  Run(
-    config_path~,
-    plan_path~,
-    dev_kind~,
-    review_kind~,
-    review_interval~,
-    rlm~,
-    ralph~,
-    lang~,
-    log_path~,
-    warnings~,
-  )
+  Run(config_path~, dev_kind~, review_kind~, lang~, log_path~, warnings~)
 }
 
 ///|
@@ -277,25 +227,6 @@ fn parse_kind_alias(raw : String) -> @types.AgentKind? {
     "mock" => Some(Mock)
     _ => None
   }
-}
-
-///|
-fn parse_positive_int(s : String) -> Int? {
-  if s.is_empty() {
-    return None
-  }
-  let mut result = 0
-  for ch in s {
-    if ch >= '0' && ch <= '9' {
-      result = result * 10 + (ch.to_int() - '0'.to_int())
-    } else {
-      return None
-    }
-  }
-  if result < 1 {
-    return None
-  }
-  Some(result)
 }
 
 ///|

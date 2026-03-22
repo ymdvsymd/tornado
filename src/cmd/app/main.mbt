@@ -22,12 +22,8 @@ fn main {
   match command {
     @cli.CliCommand::Run(
       config_path~,
-      plan_path~,
       dev_kind~,
       review_kind~,
-      review_interval~,
-      rlm~,
-      ralph~,
       log_path~,
       lang=cli_lang,
       warnings~
@@ -40,15 +36,7 @@ fn main {
         Some(path) => set_log_file(path)
         None => ()
       }
-      if ralph {
-        run_ralph(config_path, lang, dev_kind, review_kind)
-      } else {
-        let initial_task = load_plan_task(plan_path)
-        run_repl(
-          config_path, plan_path, rlm, initial_task, dev_kind, review_kind, review_interval,
-          lang,
-        )
-      }
+      run_ralph(config_path, lang, dev_kind, review_kind)
     }
     @cli.CliCommand::Validate(path) =>
       match path {
@@ -62,44 +50,27 @@ fn main {
 
 ///|
 fn print_usage() -> Unit {
-  println("tornado - multi-agent development orchestrator")
+  println("tornado - milestone-based autonomous development orchestrator")
   println("")
   println("Usage:")
-  println(
-    "  tornado <plan.md> [--dev=codex] [--review=claude]  # start from plan file",
-  )
-  println("  tornado --config=tornado.json [--dev=codex] [--review=claude]")
-  println(
-    "  tornado                    # start with preset (dev:claude-code, review:codex)",
-  )
-  println("  tornado --dev=codex --review=claude")
-  println(
-    "  tornado --review-interval=3          # review every 3 dev iterations",
-  )
-  println("  tornado --rlm TODO.md                # improvement loop mode")
-  println(
-    "  tornado --ralph                      # ralph loop (milestone-based autonomous dev)",
-  )
+  println("  tornado [--config=tornado.json] [--dev=codex] [--review=claude]")
   println("  tornado validate <config>  # validate config file")
   println("")
   println("Agent kind options: claude | claude-code | codex | api | mock")
   println("")
   println("Options:")
-  println("  --review-interval=N  Run N dev iterations per review (default: 1)")
-  println(
-    "  --rlm                Enable improvement loop mode (measure→improve→verify→commit/revert)",
-  )
-  println("  --version, -v          Show version")
-  println(
-    "  --ralph              Enable ralph loop mode (milestone→plan→execute→verify)",
-  )
+  println("  --config=<path>      Config file path (default: preset)")
+  println("  --dev=<kind>         Override builder agent kind")
+  println("  --review=<kind>      Override review agent kind")
   println(
     "  --lang=auto|ja|en    Review language (default: auto, detected from LANG env)",
   )
+  println("  --log=<path>         Log file path")
+  println("  --version, -v        Show version")
   println("")
-  println("Autonomous heartbeat: dev runs → reviewer reviews →")
-  println("dev continues with next task → forever until Ctrl+C.")
-  println("Session auto-saved to .tornado/session.json for resume.")
+  println(
+    "Ralph loop: milestone → plan → execute → verify → next milestone.",
+  )
 }
 
 ///|
@@ -222,53 +193,6 @@ fn is_existing_file(path : String) -> Bool {
   match read_file_result(path) {
     Ok(_) => true
     Err(_) => false
-  }
-}
-
-///|
-fn load_plan_task(plan_path : String?) -> String? {
-  match plan_path {
-    Some(path) =>
-      // Verify the file exists and is readable
-      match read_file_result(path) {
-        Err(err) => {
-          log("WARN", "Failed to read plan file \{path}: \{err}")
-          None
-        }
-        Ok(content) =>
-          if content.trim().to_string().is_empty() {
-            log("WARN", "Plan file is empty: \{path}")
-            None
-          } else {
-            log("BOOT", "Using plan file: \{path}")
-            Some(build_plan_file_task(path, ""))
-          }
-      }
-    None => None
-  }
-}
-
-///|
-/// Load config from file, or use preset
-fn load_config(config_path : String?) -> @config.ProjectConfig {
-  match config_path {
-    Some(path) => {
-      let content = match read_file_result(path) {
-        Err(err) => {
-          log("WARN", "Failed to read \{path}: \{err}")
-          log("WARN", "Falling back to preset config")
-          return @config.ProjectConfig::preset_default()
-        }
-        Ok(c) => c
-      }
-      @config.ProjectConfig::from_json_string(content) catch {
-        err => {
-          log("WARN", "Invalid config: \{err}, using preset")
-          @config.ProjectConfig::preset_default()
-        }
-      }
-    }
-    None => @config.ProjectConfig::preset_default()
   }
 }
 

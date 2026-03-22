@@ -10,49 +10,16 @@ test "parse_cli_args flags only" {
   match parsed {
     Run(
       config_path=config,
-      plan_path=plan,
       log_path=_,
       dev_kind=dev,
       review_kind=review,
-      review_interval=ri,
-      rlm~,
-      ralph=_,
       lang~,
       warnings~
     ) => {
       inspect(config, content="None")
-      inspect(plan, content="None")
       inspect(dev, content="Some(Codex)")
       inspect(review, content="Some(ClaudeCode)")
-      inspect(ri, content="None")
-      inspect(rlm, content="false")
       inspect(lang, content="None")
-      assert_true(warnings.is_empty())
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args first positional file is plan" {
-  let args = ["tornado", "plan.md", "--dev=codex"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(
-      config_path=config,
-      plan_path=plan,
-      log_path=_,
-      dev_kind=dev,
-      review_kind=_,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
-      lang=_,
-      warnings~
-    ) => {
-      inspect(config, content="None")
-      inspect(plan, content="Some(\"plan.md\")")
-      inspect(dev, content="Some(Codex)")
       assert_true(warnings.is_empty())
     }
     _ => panic()
@@ -66,18 +33,13 @@ test "parse_cli_args supports --config=value" {
   match parsed {
     Run(
       config_path=config,
-      plan_path=plan,
       log_path=_,
       dev_kind=dev,
       review_kind=review,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
       lang=_,
       warnings~
     ) => {
       inspect(config, content="Some(\"config.json\")")
-      inspect(plan, content="None")
       inspect(dev, content="None")
       inspect(review, content="Some(Codex)")
       assert_true(warnings.is_empty())
@@ -93,18 +55,13 @@ test "parse_cli_args supports --config <value>" {
   match parsed {
     Run(
       config_path=config,
-      plan_path=plan,
       log_path=_,
       dev_kind=dev,
       review_kind=review,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
       lang=_,
       warnings~
     ) => {
       inspect(config, content="Some(\"config.json\")")
-      inspect(plan, content="None")
       inspect(dev, content="None")
       inspect(review, content="Some(Codex)")
       assert_true(warnings.is_empty())
@@ -190,127 +147,29 @@ test "parse_cli_args --log missing value warns" {
 }
 
 ///|
-test "parse_cli_args warns on non-file positional argument" {
+test "parse_cli_args positional argument warns" {
   let args = ["tornado", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=config,
-      plan_path=plan,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
-      lang=_,
-      warnings~
-    ) => {
+    Run(config_path=config, warnings~, ..) => {
       inspect(config, content="None")
-      inspect(plan, content="None")
       assert_true(warnings.length() == 1)
-      assert_true(warnings[0].contains("use --config"))
+      assert_true(warnings[0].contains("Unexpected argument"))
     }
     _ => panic()
   }
 }
 
 ///|
-test "parse_cli_args --review-interval=3" {
-  let args = ["tornado", "--review-interval=3", "--dev=codex"]
+test "parse_cli_args legacy flags silently ignored" {
+  let args = [
+    "tornado", "--ralph", "--rlm", "--review-interval=3", "--dev=codex",
+  ]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=dev,
-      review_kind=_,
-      review_interval=ri,
-      rlm~,
-      ralph=_,
-      lang=_,
-      warnings~
-    ) => {
+    Run(dev_kind=dev, warnings~, ..) => {
       inspect(dev, content="Some(Codex)")
-      inspect(ri, content="Some(3)")
-      inspect(rlm, content="false")
       assert_true(warnings.is_empty())
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args --rlm flag" {
-  let args = ["tornado", "--rlm", "plan.md"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(
-      config_path=_,
-      plan_path=plan,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=_,
-      rlm~,
-      ralph=_,
-      lang=_,
-      warnings~
-    ) => {
-      inspect(plan, content="Some(\"plan.md\")")
-      inspect(rlm, content="true")
-      assert_true(warnings.is_empty())
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args --review-interval invalid warns" {
-  let args = ["tornado", "--review-interval=abc"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=ri,
-      rlm=_,
-      ralph=_,
-      lang=_,
-      warnings~
-    ) => {
-      inspect(ri, content="None")
-      assert_true(warnings.length() == 1)
-      assert_true(warnings[0].contains("Invalid --review-interval"))
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args --review-interval=0 warns" {
-  let args = ["tornado", "--review-interval=0"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=ri,
-      rlm=_,
-      ralph=_,
-      lang=_,
-      warnings~
-    ) => {
-      inspect(ri, content="None")
-      assert_true(warnings.length() == 1)
-      assert_true(warnings[0].contains("Invalid --review-interval"))
     }
     _ => panic()
   }
@@ -321,18 +180,7 @@ test "parse_cli_args --lang=ja" {
   let args = ["tornado", "--lang=ja", "--dev=codex"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=dev,
-      review_kind=_,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
-      lang~,
-      warnings~
-    ) => {
+    Run(dev_kind=dev, lang~, warnings~, ..) => {
       inspect(dev, content="Some(Codex)")
       inspect(lang, content="Some(\"ja\")")
       assert_true(warnings.is_empty())
@@ -346,18 +194,7 @@ test "parse_cli_args --lang=en" {
   let args = ["tornado", "--lang=en"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
-      lang~,
-      warnings~
-    ) => {
+    Run(lang~, warnings~, ..) => {
       inspect(lang, content="Some(\"en\")")
       assert_true(warnings.is_empty())
     }
@@ -370,18 +207,7 @@ test "parse_cli_args --lang=auto" {
   let args = ["tornado", "--lang=auto"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
-      lang~,
-      warnings~
-    ) => {
+    Run(lang~, warnings~, ..) => {
       inspect(lang, content="Some(\"auto\")")
       assert_true(warnings.is_empty())
     }
@@ -394,18 +220,7 @@ test "parse_cli_args --lang=invalid warns" {
   let args = ["tornado", "--lang=fr"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=_,
-      rlm=_,
-      ralph=_,
-      lang~,
-      warnings~
-    ) => {
+    Run(lang~, warnings~, ..) => {
       inspect(lang, content="None")
       assert_true(warnings.length() == 1)
       assert_true(warnings[0].contains("Unknown --lang"))
@@ -443,76 +258,4 @@ test "apply_overrides keeps review_interval when not overridden" {
   let base = @config.ProjectConfig::preset_default()
   let updated = @cli.apply_overrides(base)
   inspect(updated.review_interval, content="1")
-}
-
-///|
-test "parse_cli_args --ralph flag" {
-  let args = ["tornado", "--ralph", "--dev=mock"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=dev,
-      review_kind=_,
-      review_interval=_,
-      rlm~,
-      ralph~,
-      lang=_,
-      warnings~
-    ) => {
-      inspect(ralph, content="true")
-      inspect(rlm, content="false")
-      inspect(dev, content="Some(Mock)")
-      assert_true(warnings.is_empty())
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args --ralph and --rlm together" {
-  let args = ["tornado", "--ralph", "--rlm"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=_,
-      rlm~,
-      ralph~,
-      lang=_,
-      warnings~
-    ) => {
-      inspect(ralph, content="true")
-      inspect(rlm, content="true")
-      assert_true(warnings.is_empty())
-    }
-    _ => panic()
-  }
-}
-
-///|
-test "parse_cli_args ralph defaults to false" {
-  let args = ["tornado", "--dev=codex"]
-  let parsed = @cli.parse_cli_args(args, file_exists_mock)
-  match parsed {
-    Run(
-      config_path=_,
-      plan_path=_,
-      log_path=_,
-      dev_kind=_,
-      review_kind=_,
-      review_interval=_,
-      rlm=_,
-      ralph~,
-      lang=_,
-      warnings=_
-    ) => inspect(ralph, content="false")
-    _ => panic()
-  }
 }

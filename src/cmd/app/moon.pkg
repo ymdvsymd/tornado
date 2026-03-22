@@ -3,8 +3,6 @@ import {
   "mizchi/tornado/config",
   "mizchi/tornado/cli",
   "mizchi/tornado/agent",
-  "mizchi/tornado/review",
-  "mizchi/tornado/display",
   "mizchi/tornado/ralph",
   "mizchi/tornado/cmd/helpers",
   "moonbitlang/x/sys",
