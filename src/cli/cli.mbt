@@ -152,12 +152,8 @@ fn parse_run_args(
       continue
     }
 
-    // Legacy flags are silently ignored
-    if token.has_prefix("--review-interval=") ||
-      token == "--rlm" ||
-      token == "--ralph" ||
-      token.has_prefix("--dev=") ||
-      token.has_prefix("--review=") {
+    // --ralph is the default mode; flag accepted for explicitness
+    if token == "--ralph" {
       i += 1
       continue
     }

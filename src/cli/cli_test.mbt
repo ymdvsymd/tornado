@@ -162,10 +162,8 @@ test "parse_cli_args positional argument warns" {
 }
 
 ///|
-test "parse_cli_args legacy flags silently ignored" {
-  let args = [
-    "whirlwind", "--ralph", "--rlm", "--review-interval=3", "--dev=codex", "--review=claude",
-  ]
+test "parse_cli_args --ralph flag accepted without warning" {
+  let args = ["whirlwind", "--ralph"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(warnings~, ..) => assert_true(warnings.is_empty())
