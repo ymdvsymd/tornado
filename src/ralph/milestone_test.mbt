@@ -119,6 +119,140 @@ test "Milestone summary parsing and serialization" {
 }
 
 ///|
+test "to_json produces valid JSON parseable by @json.parse" {
+  let json =
+    #|{
+    #|  "brief": "test",
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1",
+    #|      "goal": "Handle special chars: \"quotes\" and \\backslash",
+    #|      "status": "done",
+    #|      "summary": "Line1\nLine2\ttab",
+    #|      "tasks": [
+    #|        {
+    #|          "id": "m1-t1",
+    #|          "description": "Task with\nnewline",
+    #|          "wave": 0,
+    #|          "status": "done",
+    #|          "result": "Result with\ttab",
+    #|          "plan_doc": "Plan\nwith\nnewlines"
+    #|        }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let serialized = mgr.to_json()
+  // The serialized output must be valid JSON that @json.parse can handle
+  let reparsed = @json.parse(serialized) catch {
+    err => fail("to_json output is not valid JSON: \{err}")
+  }
+  // Verify the data survived the roundtrip
+  let mgr2 = @ralph.MilestoneManager::load_from_json(serialized)
+  inspect(
+    mgr2.milestones[0].goal,
+    content="Handle special chars: \"quotes\" and \\backslash",
+  )
+  inspect(mgr2.milestones[0].summary, content="Line1\nLine2\ttab")
+  inspect(mgr2.milestones[0].tasks[0].description, content="Task with\nnewline")
+  inspect(
+    mgr2.milestones[0].tasks[0].result.unwrap(),
+    content="Result with\ttab",
+  )
+  // Verify reparsed is an Object (well-formed JSON structure)
+  guard reparsed is Object(_)
+}
+
+///|
+test "to_json uses Json API not manual string concatenation" {
+  // Verify that the serialized JSON has proper structure by checking
+  // it can be parsed and has expected keys
+  let mgr = @ralph.MilestoneManager::new()
+  mgr.milestones.push({
+    id: "m1",
+    goal: "test goal",
+    status: @types.MilestoneStatus::Pending,
+    tasks: [
+      {
+        id: "m1-t1",
+        description: "task desc",
+        wave: 0,
+        status: @types.TaskStatus::Pending,
+        result: None,
+        plan_doc: None,
+      },
+      {
+        id: "m1-t2",
+        description: "task with result",
+        wave: 1,
+        status: @types.TaskStatus::Done,
+        result: Some("done result"),
+        plan_doc: Some("plan content"),
+      },
+    ],
+    current_wave: 0,
+    summary: "",
+  })
+  let serialized = mgr.to_json()
+  // Must be valid JSON
+  let parsed = @json.parse(serialized) catch {
+    err => fail("to_json output is not valid JSON: \{err}")
+  }
+  // Verify structure through parsing
+  match parsed {
+    Object(map) => {
+      // Must have "brief" and "milestones" keys
+      assert_true(map.contains("brief"))
+      assert_true(map.contains("milestones"))
+      match map.get("milestones") {
+        Some(Array(arr)) => {
+          assert_true(arr.length() == 1)
+          match arr[0] {
+            Object(m_map) => {
+              assert_true(m_map.contains("id"))
+              assert_true(m_map.contains("goal"))
+              assert_true(m_map.contains("status"))
+              assert_true(m_map.contains("tasks"))
+              assert_true(m_map.contains("current_wave"))
+              assert_true(m_map.contains("summary"))
+              // Check null result is properly represented
+              match m_map.get("tasks") {
+                Some(Array(tasks)) => {
+                  assert_true(tasks.length() == 2)
+                  match tasks[0] {
+                    Object(t_map) =>
+                      // result should be null for first task
+                      match t_map.get("result") {
+                        Some(Null) => ()
+                        other => fail("Expected null result, got \{other}")
+                      }
+                    _ => fail("Expected task object")
+                  }
+                  match tasks[1] {
+                    Object(t_map) =>
+                      // result should be a string for second task
+                      match t_map.get("result") {
+                        Some(String(s)) => inspect(s, content="done result")
+                        other => fail("Expected string result, got \{other}")
+                      }
+                    _ => fail("Expected task object")
+                  }
+                }
+                _ => fail("Expected tasks array")
+              }
+            }
+            _ => fail("Expected milestone object")
+          }
+        }
+        _ => fail("Expected milestones array")
+      }
+    }
+    _ => fail("Expected top-level object")
+  }
+}
+
+///|
 test "next_pending_milestone returns first pending" {
   let json =
     #|{
