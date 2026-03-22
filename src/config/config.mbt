@@ -45,83 +45,30 @@ fn parse_agent_role(s : String) -> @types.AgentRole {
 }
 
 ///|
-/// Get a string from a JSON object
-fn get_string(json : Json, key : String, default : String) -> String {
-  match json {
-    Object(map) =>
-      match map.get(key) {
-        Some(String(s)) => s
-        _ => default
-      }
-    _ => default
-  }
-}
-
-///|
-/// Get an int from a JSON object
-fn get_int(json : Json, key : String, default : Int) -> Int {
-  match json {
-    Object(map) =>
-      match map.get(key) {
-        Some(Number(n, ..)) => n.to_int()
-        _ => default
-      }
-    _ => default
-  }
-}
-
-///|
-/// Get a bool from a JSON object
-fn get_bool(json : Json, key : String, default : Bool) -> Bool {
-  match json {
-    Object(map) =>
-      match map.get(key) {
-        Some(True) => true
-        Some(False) => false
-        _ => default
-      }
-    _ => default
-  }
-}
-
-///|
-/// Get an optional string from a JSON object
-fn get_string_opt(json : Json, key : String) -> String? {
-  match json {
-    Object(map) =>
-      match map.get(key) {
-        Some(String(s)) => Some(s)
-        _ => None
-      }
-    _ => None
-  }
-}
-
-///|
 /// Parse a single agent config from JSON, collecting warnings for unknown values
 fn parse_agent_config(
   json : Json,
   warnings : Array[String],
 ) -> @types.AgentConfig {
-  let id = get_string(json, "id", "")
-  let kind_str = get_string(json, "kind", "mock")
+  let id = @util.get_string(json, "id", "")
+  let kind_str = @util.get_string(json, "kind", "mock")
   if not(valid_agent_kinds.contains(kind_str)) {
     warnings.push(
       "Agent '\{id}': unknown kind '\{kind_str}', defaulting to Mock",
     )
   }
   let kind = parse_agent_kind(kind_str)
-  let role_str = get_string(json, "role", "dev")
+  let role_str = @util.get_string(json, "role", "dev")
   if not(valid_agent_roles.contains(role_str)) {
     warnings.push(
       "Agent '\{id}': unknown role '\{role_str}', defaulting to Dev",
     )
   }
   let role = parse_agent_role(role_str)
-  let model = get_string_opt(json, "model")
-  let system_prompt = get_string_opt(json, "system_prompt")
-  let working_dir = get_string(json, "working_dir", ".")
-  let max_iterations = get_int(json, "max_iterations", 10)
+  let model = @util.get_string_opt(json, "model")
+  let system_prompt = @util.get_string_opt(json, "system_prompt")
+  let working_dir = @util.get_string(json, "working_dir", ".")
+  let max_iterations = @util.get_int(json, "max_iterations", 10)
   { id, kind, role, model, system_prompt, working_dir, max_iterations }
 }
 
@@ -141,10 +88,10 @@ pub fn ProjectConfig::from_json_string(
 pub fn ProjectConfig::from_json(json : Json) -> ProjectConfig raise Failure {
   match json {
     Object(map) => {
-      let project_dir = get_string(json, "project_dir", ".")
-      let review_dir = get_string(json, "review_dir", "docs/reviews")
-      let max_review_cycles = get_int(json, "max_review_cycles", 3)
-      let review_interval = get_int(json, "review_interval", 1)
+      let project_dir = @util.get_string(json, "project_dir", ".")
+      let review_dir = @util.get_string(json, "review_dir", "docs/reviews")
+      let max_review_cycles = @util.get_int(json, "max_review_cycles", 3)
+      let review_interval = @util.get_int(json, "review_interval", 1)
       let agents : Array[@types.AgentConfig] = []
       let parse_warnings : Array[String] = []
       match map.get("agents") {
@@ -154,9 +101,9 @@ pub fn ProjectConfig::from_json(json : Json) -> ProjectConfig raise Failure {
           }
         _ => ()
       }
-      let ralph_enabled = get_bool(json, "ralph_enabled", false)
-      let milestones_path = get_string_opt(json, "milestones_path")
-      let max_rework_attempts = get_int(json, "max_rework_attempts", 3)
+      let ralph_enabled = @util.get_bool(json, "ralph_enabled", false)
+      let milestones_path = @util.get_string_opt(json, "milestones_path")
+      let max_rework_attempts = @util.get_int(json, "max_rework_attempts", 3)
       {
         project_dir,
         review_dir,

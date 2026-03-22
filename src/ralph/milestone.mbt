@@ -111,9 +111,9 @@ pub fn MilestoneManager::parse_planner_output(
 
 ///|
 fn parse_milestone(json : Json) -> @types.Milestone {
-  let id = get_str(json, "id", "")
-  let goal = get_str(json, "goal", "")
-  let status_str = get_str(json, "status", "pending")
+  let id = @util.get_string(json, "id", "")
+  let goal = @util.get_string(json, "goal", "")
+  let status_str = @util.get_string(json, "status", "pending")
   let status : @types.MilestoneStatus = match status_str {
     "in_progress" => InProgress
     "done" => Done
@@ -121,8 +121,8 @@ fn parse_milestone(json : Json) -> @types.Milestone {
     _ => Pending
   }
   let tasks : Array[@types.RalphTask] = []
-  let current_wave = get_num(json, "current_wave", 0)
-  let summary = get_str(json, "summary", "")
+  let current_wave = @util.get_int(json, "current_wave", 0)
+  let summary = @util.get_string(json, "summary", "")
   match json {
     Object(map) =>
       match map.get("tasks") {
@@ -139,10 +139,10 @@ fn parse_milestone(json : Json) -> @types.Milestone {
 
 ///|
 fn parse_ralph_task(json : Json) -> @types.RalphTask {
-  let id = get_str(json, "id", "")
-  let description = get_str(json, "description", "")
-  let wave = get_num(json, "wave", 0)
-  let status_str = get_str(json, "status", "pending")
+  let id = @util.get_string(json, "id", "")
+  let description = @util.get_string(json, "description", "")
+  let wave = @util.get_int(json, "wave", 0)
+  let status_str = @util.get_string(json, "status", "pending")
   let status : @types.TaskStatus = match status_str {
     "in_progress" => Pending
     "done" => Done
@@ -180,6 +180,7 @@ fn milestone_to_json_value(m : @types.Milestone) -> Json {
   for t in m.tasks {
     task_arr.push(ralph_task_to_json_value(t))
   }
+<<<<<<< HEAD
   let obj : Map[String, Json] = {}
   obj["id"] = m.id.to_json()
   obj["goal"] = m.goal.to_json()
@@ -198,6 +199,7 @@ fn ralph_task_to_json_value(t : @types.RalphTask) -> Json {
     Done => "done"
     Failed(_) => "failed"
   }
+<<<<<<< HEAD
   let result_json : Json = match t.result {
     Some(s) => s.to_json()
     None => Json::null()
@@ -214,42 +216,6 @@ fn ralph_task_to_json_value(t : @types.RalphTask) -> Json {
   obj["result"] = result_json
   obj["plan_doc"] = plan_doc_json
   Json::object(obj)
-}
-
-///|
-fn join_strings(parts : Array[String], sep : String) -> String {
-  let buf = StringBuilder::new()
-  for i, part in parts {
-    if i > 0 {
-      buf.write_string(sep)
-    }
-    buf.write_string(part)
-  }
-  buf.to_string()
-}
-
-///|
-fn get_str(json : Json, key : String, default : String) -> String {
-  match json {
-    Object(map) =>
-      match map.get(key) {
-        Some(String(s)) => s
-        _ => default
-      }
-    _ => default
-  }
-}
-
-///|
-fn get_num(json : Json, key : String, default : Int) -> Int {
-  match json {
-    Object(map) =>
-      match map.get(key) {
-        Some(Number(n, ..)) => n.to_int()
-        _ => default
-      }
-    _ => default
-  }
 }
 
 ///|
@@ -286,9 +252,9 @@ fn parse_plan_text(
 ) -> Array[@types.RalphTask] {
   let tasks : Array[@types.RalphTask] = []
   let mut current_wave = 0
-  let lines = split_lines(output)
+  let lines = @util.split_lines(output)
   for line in lines {
-    let trimmed = trim(line)
+    let trimmed = @util.trim(line)
     if trimmed.is_empty() {
       continue
     }
@@ -324,45 +290,6 @@ fn parse_plan_text(
 }
 
 ///|
-fn split_lines(s : String) -> Array[String] {
-  let lines : Array[String] = []
-  let buf = StringBuilder::new()
-  for ch in s {
-    if ch == '\n' {
-      lines.push(buf.to_string())
-      buf.reset()
-    } else if ch == '\r' {
-      // skip
-    } else {
-      buf.write_char(ch)
-    }
-  }
-  let remaining = buf.to_string()
-  if not(remaining.is_empty()) {
-    lines.push(remaining)
-  }
-  lines
-}
-
-///|
-fn trim(s : String) -> String {
-  let chars = s.to_array()
-  let len = chars.length()
-  let mut start = 0
-  while start < len && (chars[start] == ' ' || chars[start] == '\t') {
-    start += 1
-  }
-  let mut end = len
-  while end > start && (chars[end - 1] == ' ' || chars[end - 1] == '\t') {
-    end -= 1
-  }
-  if start >= end {
-    return ""
-  }
-  String::from_array(chars[start:end])
-}
-
-///|
 fn is_separator(s : String) -> Bool {
   let chars = s.to_array()
   if chars.length() < 3 {
@@ -381,7 +308,7 @@ fn strip_markdown_prefix(s : String) -> String {
   let mut result = s
   // Strip leading "## ", "# ", etc.
   while result.has_prefix("#") {
-    result = trim(String::from_array(result.to_array()[1:]))
+    result = @util.trim(String::from_array(result.to_array()[1:]))
   }
   // Strip bold markers "**"
   while result.has_prefix("**") {
@@ -435,12 +362,12 @@ fn parse_list_item(s : String) -> String {
       while i < len && chars[i] == ' ' {
         i += 1
       }
-      return trim(String::from_array(chars[i:]))
+      return @util.trim(String::from_array(chars[i:]))
     }
   }
   // Check "- description"
   if len > 1 && chars[0] == '-' && chars[1] == ' ' {
-    return trim(String::from_array(chars[2:]))
+    return @util.trim(String::from_array(chars[2:]))
   }
   ""
 }

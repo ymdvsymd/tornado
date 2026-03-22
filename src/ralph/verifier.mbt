@@ -212,17 +212,21 @@ pub fn inject_perspective_tag(
   perspective : VerifierPerspective,
 ) -> String {
   let tag = "[" + perspective.to_string() + "] "
-  let colon_idx = find_substring(item, ": ")
+  let colon_idx = @util.find_substring(item, ": ")
   if colon_idx >= 0 {
-    let prefix = substring(item, 0, colon_idx + 2)
-    let suffix = substring(item, colon_idx + 2, item.to_array().length())
+    let prefix = @util.substring(item, 0, colon_idx + 2)
+    let suffix = @util.substring(item, colon_idx + 2, item.to_array().length())
     prefix + tag + suffix
   } else {
-    let space_idx = find_substring(item, " ")
+    let space_idx = @util.find_substring(item, " ")
     if space_idx > 0 {
-      let prefix = substring(item, 0, space_idx)
+      let prefix = @util.substring(item, 0, space_idx)
       if prefix.contains("-") {
-        let suffix = substring(item, space_idx + 1, item.to_array().length())
+        let suffix = @util.substring(
+          item,
+          space_idx + 1,
+          item.to_array().length(),
+        )
         prefix + " " + tag + suffix
       } else {
         tag + item
@@ -262,9 +266,9 @@ pub fn VerifierAgent::merge_verdicts(
 /// Split rework items by newline
 fn split_rework_items(s : String) -> Array[String] {
   let items : Array[String] = []
-  let lines = split_lines(s)
+  let lines = @util.split_lines(s)
   for line in lines {
-    let trimmed = trim(line)
+    let trimmed = @util.trim(line)
     if not(trimmed.is_empty()) {
       items.push(trimmed)
     }
@@ -273,37 +277,4 @@ fn split_rework_items(s : String) -> Array[String] {
     items.push(s)
   }
   items
-}
-
-///|
-fn find_substring(haystack : String, needle : String) -> Int {
-  let h = haystack.to_array()
-  let n = needle.to_array()
-  if n.length() > h.length() {
-    return -1
-  }
-  for i = 0; i <= h.length() - n.length(); i = i + 1 {
-    let mut found = true
-    for j = 0; j < n.length(); j = j + 1 {
-      if h[i + j] != n[j] {
-        found = false
-        break
-      }
-    }
-    if found {
-      return i
-    }
-  }
-  -1
-}
-
-///|
-fn substring(s : String, start : Int, end : Int) -> String {
-  let chars = s.to_array()
-  let actual_start = if start < 0 { 0 } else { start }
-  let actual_end = if end > chars.length() { chars.length() } else { end }
-  if actual_start >= actual_end {
-    return ""
-  }
-  String::from_array(chars[actual_start:actual_end])
 }
