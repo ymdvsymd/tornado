@@ -19,7 +19,7 @@ let valid_agent_kinds : Array[String] = ["claude-code", "codex", "mock"]
 ///|
 /// Known valid agent role strings
 let valid_agent_roles : Array[String] = [
-  "dev", "builder", "review", "orchestrator", "planner", "verifier",
+  "dev", "builder", "review", "planner", "verifier",
 ]
 
 ///|
@@ -38,7 +38,6 @@ fn parse_agent_role(s : String) -> @types.AgentRole {
   match s {
     "dev" | "builder" => Dev
     "review" => Review
-    "orchestrator" => Orchestrator
     "planner" => Planner
     "verifier" => Verifier
     _ => Dev

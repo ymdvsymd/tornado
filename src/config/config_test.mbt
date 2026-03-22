@@ -156,7 +156,7 @@ test "valid kind and role produce no warnings" {
     #|  "agents": [
     #|    { "id": "dev-1", "kind": "claude-code", "role": "dev" },
     #|    { "id": "rev-1", "kind": "codex", "role": "review" },
-    #|    { "id": "mock-1", "kind": "mock", "role": "orchestrator" },
+    #|    { "id": "mock-1", "kind": "mock", "role": "planner" },
     #|    { "id": "test-1", "kind": "mock", "role": "dev" }
     #|  ]
     #|}

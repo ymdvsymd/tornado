@@ -11,7 +11,6 @@ pub(all) enum AgentKind {
 pub(all) enum AgentRole {
   Dev
   Review
-  Orchestrator
   Planner
   Verifier
 } derive(Eq, Show)

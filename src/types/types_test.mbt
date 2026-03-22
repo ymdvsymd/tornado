@@ -61,7 +61,6 @@ test "AgentKind show" {
 test "AgentRole show" {
   inspect(@types.AgentRole::Dev, content="Dev")
   inspect(@types.AgentRole::Review, content="Review")
-  inspect(@types.AgentRole::Orchestrator, content="Orchestrator")
 }
 
 ///|
