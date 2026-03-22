@@ -221,7 +221,7 @@ test "parse planner and verifier roles" {
 test "parse milestones_path and max_rework_attempts" {
   let json =
     #|{
-    #|  "milestones_path": ".tornado/milestones.json",
+    #|  "milestones_path": ".whirlwind/milestones.json",
     #|  "max_rework_attempts": 5,
     #|  "agents": [
     #|    { "id": "p1", "kind": "claude-code", "role": "planner" },
@@ -230,7 +230,10 @@ test "parse milestones_path and max_rework_attempts" {
     #|}
   let config = @config.ProjectConfig::from_json_string(json)
 
-  inspect(config.milestones_path, content="Some(\".tornado/milestones.json\")")
+  inspect(
+    config.milestones_path,
+    content="Some(\".whirlwind/milestones.json\")",
+  )
   inspect(config.max_rework_attempts, content="5")
 }
 

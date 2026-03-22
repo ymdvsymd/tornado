@@ -45,23 +45,23 @@ fn main {
     @cli.CliCommand::Validate(path) =>
       match path {
         Some(config_path) => run_validate(config_path)
-        None => println("Usage: tornado validate <config.json>")
+        None => println("Usage: whirlwind validate <config.json>")
       }
     @cli.CliCommand::Help => print_usage()
-    @cli.CliCommand::Version => println("tornado v__VERSION__")
+    @cli.CliCommand::Version => println("whirlwind v__VERSION__")
   }
 }
 
 ///|
 fn print_usage() -> Unit {
-  println("tornado - milestone-based autonomous development orchestrator")
+  println("whirlwind - milestone-based autonomous development orchestrator")
   println("")
   println("Usage:")
   println(
-    "  tornado [--planner=claude-code] [--builder=codex] [--verifier=claude-code]",
+    "  whirlwind [--planner=claude-code] [--builder=codex] [--verifier=claude-code]",
   )
-  println("  tornado --config=tornado.json")
-  println("  tornado validate <config>  # validate config file")
+  println("  whirlwind --config=whirlwind.json")
+  println("  whirlwind validate <config>  # validate config file")
   println("")
   println("Agent kind options: claude | claude-code | codex | mock")
   println("")
@@ -137,7 +137,7 @@ fn run_ralph(
   // Load or create milestones
   let milestones_path = match config.milestones_path {
     Some(p) => p
-    None => ".tornado/milestones.json"
+    None => ".whirlwind/milestones.json"
   }
   let mgr = if is_existing_file(milestones_path) {
     match read_file_result(milestones_path) {

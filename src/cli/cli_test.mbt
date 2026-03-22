@@ -6,7 +6,7 @@ fn file_exists_mock(path : String) -> Bool {
 ///|
 test "parse_cli_args role-specific kind flags" {
   let args = [
-    "tornado", "--planner=claude-code", "--builder=codex", "--verifier=mock",
+    "whirlwind", "--planner=claude-code", "--builder=codex", "--verifier=mock",
   ]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
@@ -34,7 +34,7 @@ test "parse_cli_args role-specific kind flags" {
 
 ///|
 test "parse_cli_args supports --config=value" {
-  let args = ["tornado", "--config=config.json", "--builder=codex"]
+  let args = ["whirlwind", "--config=config.json", "--builder=codex"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(config_path=config, builder_kind~, warnings~, ..) => {
@@ -48,7 +48,7 @@ test "parse_cli_args supports --config=value" {
 
 ///|
 test "parse_cli_args supports --config <value>" {
-  let args = ["tornado", "--config", "config.json"]
+  let args = ["whirlwind", "--config", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(config_path=config, warnings~, ..) => {
@@ -61,7 +61,7 @@ test "parse_cli_args supports --config <value>" {
 
 ///|
 test "parse_cli_args --milestones=path" {
-  let args = ["tornado", "--milestones=.tornado/milestones.json"]
+  let args = ["whirlwind", "--milestones=.tornado/milestones.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(milestones_path~, warnings~, ..) => {
@@ -74,7 +74,7 @@ test "parse_cli_args --milestones=path" {
 
 ///|
 test "parse_cli_args validate command" {
-  let args = ["tornado", "validate", "config.json"]
+  let args = ["whirlwind", "validate", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Validate(path) => inspect(path, content="Some(\"config.json\")")
@@ -84,7 +84,7 @@ test "parse_cli_args validate command" {
 
 ///|
 test "parse_cli_args version command" {
-  let args = ["tornado", "version"]
+  let args = ["whirlwind", "version"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Version => ()
@@ -94,7 +94,7 @@ test "parse_cli_args version command" {
 
 ///|
 test "parse_cli_args --version flag" {
-  let args = ["tornado", "--version"]
+  let args = ["whirlwind", "--version"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Version => ()
@@ -104,7 +104,7 @@ test "parse_cli_args --version flag" {
 
 ///|
 test "parse_cli_args -v flag" {
-  let args = ["tornado", "-v"]
+  let args = ["whirlwind", "-v"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Version => ()
@@ -114,7 +114,7 @@ test "parse_cli_args -v flag" {
 
 ///|
 test "parse_cli_args --log=path" {
-  let args = ["tornado", "--log=/tmp/tornado.log"]
+  let args = ["whirlwind", "--log=/tmp/tornado.log"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(log_path~, ..) =>
@@ -125,7 +125,7 @@ test "parse_cli_args --log=path" {
 
 ///|
 test "parse_cli_args --log path" {
-  let args = ["tornado", "--log", "/tmp/tornado.log"]
+  let args = ["whirlwind", "--log", "/tmp/tornado.log"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(log_path~, ..) =>
@@ -136,7 +136,7 @@ test "parse_cli_args --log path" {
 
 ///|
 test "parse_cli_args --log missing value warns" {
-  let args = ["tornado", "--log"]
+  let args = ["whirlwind", "--log"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(log_path~, warnings~, ..) => {
@@ -150,7 +150,7 @@ test "parse_cli_args --log missing value warns" {
 
 ///|
 test "parse_cli_args positional argument warns" {
-  let args = ["tornado", "config.json"]
+  let args = ["whirlwind", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(warnings~, ..) => {
@@ -164,7 +164,7 @@ test "parse_cli_args positional argument warns" {
 ///|
 test "parse_cli_args legacy flags silently ignored" {
   let args = [
-    "tornado", "--ralph", "--rlm", "--review-interval=3", "--dev=codex", "--review=claude",
+    "whirlwind", "--ralph", "--rlm", "--review-interval=3", "--dev=codex", "--review=claude",
   ]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
@@ -175,7 +175,7 @@ test "parse_cli_args legacy flags silently ignored" {
 
 ///|
 test "parse_cli_args --lang=ja" {
-  let args = ["tornado", "--lang=ja"]
+  let args = ["whirlwind", "--lang=ja"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(lang~, warnings~, ..) => {
@@ -188,7 +188,7 @@ test "parse_cli_args --lang=ja" {
 
 ///|
 test "parse_cli_args --lang=invalid warns" {
-  let args = ["tornado", "--lang=fr"]
+  let args = ["whirlwind", "--lang=fr"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(lang~, warnings~, ..) => {
