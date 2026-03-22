@@ -1,4 +1,4 @@
-import { formatResultLog } from "./runner-io.mjs";
+import { formatResultLog, truncate, collapseWhitespace } from "./runner-io.mjs";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -43,16 +43,6 @@ type CodexTurnEvent = {
   usage?: CodexTurnUsage;
   error?: { message?: string };
 };
-
-function truncate(value: unknown, max = 80): string {
-  return String(value || "").slice(0, max);
-}
-
-function collapseWhitespace(value: unknown): string {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function getItemId(item: CodexItem): string {
   return typeof item?.id === "string" ? item.id : "";
@@ -149,6 +139,23 @@ function extractMcpResultText(item: CodexItem): string {
   return "";
 }
 
+function formatCommonItemLog(item: CodexItem): string | null {
+  switch (item?.type) {
+    case "reasoning": {
+      const text = collapseWhitespace(item.text || "");
+      return text ? `Reasoning: ${truncate(text, 100)}` : "Thinking...";
+    }
+    case "web_search":
+      return `WebSearch(${truncate(collapseWhitespace(item.query || ""), 100)})`;
+    case "todo_list":
+      return `Todo: ${formatTodoSummary(item.items || [])}`;
+    case "error":
+      return `Error: ${truncate(collapseWhitespace(item.message || ""), 100)}`;
+    default:
+      return null;
+  }
+}
+
 export function formatItemStartLog(item: CodexItem): string | null {
   switch (item?.type) {
     case "command_execution":
@@ -170,18 +177,8 @@ export function formatItemStartLog(item: CodexItem): string | null {
       const text = collapseWhitespace(item.text || "");
       return text ? `Message: ${truncate(text, 100)}` : "Generating...";
     }
-    case "reasoning": {
-      const text = collapseWhitespace(item.text || "");
-      return text ? `Reasoning: ${truncate(text, 100)}` : "Thinking...";
-    }
-    case "web_search":
-      return `WebSearch(${truncate(collapseWhitespace(item.query || ""), 100)})`;
-    case "todo_list":
-      return `Todo: ${formatTodoSummary(item.items || [])}`;
-    case "error":
-      return `Error: ${truncate(collapseWhitespace(item.message || ""), 100)}`;
     default:
-      return null;
+      return formatCommonItemLog(item);
   }
 }
 
@@ -192,20 +189,10 @@ export function formatItemUpdateLog(item: CodexItem): string | null {
       if (line) return `Bash output: ${truncate(line, 100)}`;
       return `Bash running: ${truncate(collapseWhitespace(item.command || ""), 80)}`;
     }
-    case "todo_list":
-      return `Todo: ${formatTodoSummary(item.items || [])}`;
-    case "reasoning": {
-      const text = collapseWhitespace(item.text || "");
-      return text ? `Reasoning: ${truncate(text, 100)}` : "Thinking...";
-    }
-    case "web_search":
-      return `WebSearch(${truncate(collapseWhitespace(item.query || ""), 100)})`;
     case "mcp_tool_call":
       return `MCP running: ${truncate(formatMcpLabel(item), 100)}`;
-    case "error":
-      return `Error: ${truncate(collapseWhitespace(item.message || ""), 100)}`;
     default:
-      return null;
+      return formatCommonItemLog(item);
   }
 }
 
@@ -234,18 +221,8 @@ export function formatItemCompleteLog(item: CodexItem): string | null {
       const text = collapseWhitespace(item.text || "");
       return text ? `Message: ${truncate(text, 100)}` : "Message";
     }
-    case "reasoning": {
-      const text = collapseWhitespace(item.text || "");
-      return text ? `Reasoning: ${truncate(text, 100)}` : "Thinking...";
-    }
-    case "web_search":
-      return `WebSearch(${truncate(collapseWhitespace(item.query || ""), 100)})`;
-    case "todo_list":
-      return `Todo: ${formatTodoSummary(item.items || [])}`;
-    case "error":
-      return `Error: ${truncate(collapseWhitespace(item.message || ""), 100)}`;
     default:
-      return null;
+      return formatCommonItemLog(item);
   }
 }
 

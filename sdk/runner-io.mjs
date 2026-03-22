@@ -15,6 +15,14 @@ export function createLogger(tag, stream = process.stderr) {
     stream.write(`[${tag}] ${message}\n`);
   };
 }
+export function truncate(value, max = 80) {
+  return String(value || "").slice(0, max);
+}
+export function collapseWhitespace(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 export function formatResultLog({
   subtype,
   costUsd,

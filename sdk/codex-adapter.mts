@@ -164,7 +164,12 @@ function emitItemStart(
       ? normalized._display
       : formatItemStartLog(item || {}) || item?.type || "item.started";
 
-  return buildItemEmissions(item, normalized, display, lastItemLogs);
+  return buildItemEmissions({
+    item,
+    event: normalized,
+    log: display,
+    lastItemLogs,
+  });
 }
 
 function emitItemUpdate(
@@ -172,7 +177,7 @@ function emitItemUpdate(
   lastItemLogs: Map<string, string>,
 ): readonly AdapterEmission[] {
   const display = formatItemUpdateLog(item || {});
-  return buildItemEmissions(item, undefined, display, lastItemLogs);
+  return buildItemEmissions({ item, log: display, lastItemLogs });
 }
 
 function emitItemComplete(
@@ -185,12 +190,12 @@ function emitItemComplete(
       ? normalized._display
       : formatItemCompleteLog(item || {}) || item?.type || "item.completed";
 
-  const emissions = buildItemEmissions(
+  const emissions = buildItemEmissions({
     item,
-    normalized,
-    display ? `Done: ${display}` : null,
+    event: normalized,
+    log: display ? `Done: ${display}` : null,
     lastItemLogs,
-  );
+  });
 
   const itemId = getCodexItemId(item || {});
   if (itemId) {
@@ -200,12 +205,17 @@ function emitItemComplete(
   return emissions;
 }
 
+type ItemEmissionOpts = {
+  item?: CodexItem;
+  event?: unknown;
+  log?: string | null;
+  lastItemLogs: Map<string, string>;
+};
+
 function buildItemEmissions(
-  item: CodexItem | undefined,
-  event: unknown,
-  log: string | null | undefined,
-  lastItemLogs: Map<string, string>,
+  opts: ItemEmissionOpts,
 ): readonly AdapterEmission[] {
+  const { item, event, log, lastItemLogs } = opts;
   const emissions: AdapterEmission[] = [];
 
   if (event !== undefined) {

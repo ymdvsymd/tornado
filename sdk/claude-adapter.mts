@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { truncate, collapseWhitespace } from "./runner-io.mjs";
 import type {
   AdapterEmission,
   AdapterStartResult,
@@ -536,16 +537,6 @@ function firstString(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function collapseWhitespace(value: unknown): string {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function truncate(value: unknown, max = 80): string {
-  return String(value || "").slice(0, max);
 }
 
 function formatResultLog(message: ClaudeMessage): string {

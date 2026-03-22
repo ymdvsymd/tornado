@@ -27,6 +27,16 @@ export function createLogger(
   };
 }
 
+export function truncate(value: unknown, max = 80): string {
+  return String(value || "").slice(0, max);
+}
+
+export function collapseWhitespace(value: unknown): string {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export type ResultLogInfo = {
   subtype: string;
   costUsd?: number;

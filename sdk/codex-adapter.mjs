@@ -86,11 +86,16 @@ function emitItemStart(item, lastItemLogs) {
     typeof normalized?._display === "string"
       ? normalized._display
       : formatItemStartLog(item || {}) || item?.type || "item.started";
-  return buildItemEmissions(item, normalized, display, lastItemLogs);
+  return buildItemEmissions({
+    item,
+    event: normalized,
+    log: display,
+    lastItemLogs,
+  });
 }
 function emitItemUpdate(item, lastItemLogs) {
   const display = formatItemUpdateLog(item || {});
-  return buildItemEmissions(item, undefined, display, lastItemLogs);
+  return buildItemEmissions({ item, log: display, lastItemLogs });
 }
 function emitItemComplete(item, lastItemLogs) {
   const normalized = normalizeItemComplete(item || {});
@@ -98,19 +103,20 @@ function emitItemComplete(item, lastItemLogs) {
     typeof normalized?._display === "string"
       ? normalized._display
       : formatItemCompleteLog(item || {}) || item?.type || "item.completed";
-  const emissions = buildItemEmissions(
+  const emissions = buildItemEmissions({
     item,
-    normalized,
-    display ? `Done: ${display}` : null,
+    event: normalized,
+    log: display ? `Done: ${display}` : null,
     lastItemLogs,
-  );
+  });
   const itemId = getCodexItemId(item || {});
   if (itemId) {
     lastItemLogs.delete(itemId);
   }
   return emissions;
 }
-function buildItemEmissions(item, event, log, lastItemLogs) {
+function buildItemEmissions(opts) {
+  const { item, event, log, lastItemLogs } = opts;
   const emissions = [];
   if (event !== undefined) {
     emissions.push({ event });
