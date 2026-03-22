@@ -154,35 +154,6 @@ pub struct OrchestratorCallbacks {
 
 ### 4.4 ステートマシン
 
-**通常モード (Heartbeat Loop) — `run_repl()`:**
-
-```mermaid
-stateDiagram-v2
-    [*] --> Boot
-    Boot --> LoadSession : セッションあり
-    Boot --> WaitTask : セッションなし
-    LoadSession --> WaitTask : 拒否 / なし
-    LoadSession --> Dev : 復元
-
-    WaitTask --> Dev : task入力
-
-    Dev --> SkipReview : dev_since_review < review_interval
-    Dev --> Review : dev_since_review >= review_interval
-    Dev --> SkipReview : dev出力が空
-
-    SkipReview --> Dev : build_next_task()
-
-    Review --> Approved : review OK
-    Review --> Rework : NeedsChanges
-    Rework --> Review : cycle < max_cycles
-    Review --> Rejected : cycle >= max_cycles
-
-    Approved --> Dev : build_next_task()
-    Rejected --> Dev : build_next_task()
-
-    note right of Dev : check_interrupt() で<br/>ユーザー割り込み可能
-```
-
 **Ralph Loop — `run_ralph()`:**
 
 ```mermaid
@@ -250,24 +221,10 @@ CLI args -> parse_cli_args() -> CliCommand
   -> cli.apply_overrides()
   -> ProjectConfig::validate()
   -> agent.create_backends()
-  -> if ralph: RalphLoop 生成
-     else:     run_repl() (while true ループ)
+  -> RalphLoop 生成・実行
 ```
 
-### 5.2 タスク実行 (通常モード)
-
-```
-run_repl() の while true ループ:
-  -> run_dev(dev_id, task)
-       backend.run(prompt, system_prompt, on_output)
-       -> AgentResult { content, status, error }
-  -> if review_interval 未達: build_next_task() -> continue
-  -> run_review(task, dev_output)
-       -> Approved:  build_next_task() -> continue
-       -> Rejected:  check_interrupt() でユーザー入力待ち
-```
-
-### 5.3 レビューフロー
+### 5.2 レビューフロー
 
 ```
 ReviewAgent::review(task, backend)

@@ -90,7 +90,7 @@ struct EventCollector {
 | 等価分割 | lang: "ja"/"en"/"auto"/(invalid) |
 | エッジケース | empty string, malformed JSON, missing fields |
 | 状態遷移 | Task: Pending -> InProgress -> Done |
-| 複合条件 | ralph_enabled && no planner (invalid) |
+| 複合条件 | agents present && no planner (invalid) |
 
 ---
 

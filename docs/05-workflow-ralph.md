@@ -1,19 +1,17 @@
 # Whirlwind ワークフロー & Ralph 利用ガイド
 
-## 1. 2つの実行モード
+## 1. 概要
 
-Whirlwind には2つの実行モードがある。
+Whirlwind はマイルストーン駆動の自律開発ループ (Ralph モード) で動作する。
 
-| 項目           | 通常モード (Heartbeat)                             | Ralph モード                       |
-| -------------- | -------------------------------------------------- | ---------------------------------- |
-| 終了条件       | Ctrl+C のみ（無限ループ）                          | 全マイルストーン完了で自動終了     |
-| タスク生成     | 自動で次タスクを生成し続ける                       | 事前定義 or Planner が生成         |
-| エージェント   | Dev + Reviewer (2体)                               | Planner + Builder + Verifier (3体) |
-| 構造           | フラットなタスク列                                 | Milestone > Wave > Task の3層      |
-| レビュー       | 3観点レビュー (CodeQuality, Performance, Security) | マイルストーン単位の4観点検証（v0.9.0）|
-| フィードバック | Review の指摘を Dev に渡す                         | タスクID指定ルーティング（v0.6.0） |
-
-通常モードの詳細は [12. 通常モード (Heartbeat Loop) 詳細](#12-通常モード-heartbeat-loop-詳細) を参照。
+| 項目           | 説明                                               |
+| -------------- | -------------------------------------------------- |
+| 終了条件       | 全マイルストーン完了で自動終了                     |
+| タスク生成     | 事前定義 or Planner が生成                         |
+| エージェント   | Planner + Builder + Verifier (3体)                 |
+| 構造           | Milestone > Wave > Task の3層                      |
+| レビュー       | マイルストーン単位の4観点検証                      |
+| フィードバック | タスクID指定ルーティング                           |
 
 ---
 
@@ -47,10 +45,10 @@ EOF
 
 ```bash
 # プリセット構成で実行
-whirlwind --ralph
+whirlwind
 
-# または設定ファイルを使って実行
-whirlwind --ralph --config=whirlwind.json
+# 設定ファイルを使って実行
+whirlwind --config=whirlwind.json
 ```
 
 ### Step 3: 結果を確認
@@ -64,64 +62,54 @@ whirlwind --ralph --config=whirlwind.json
 ### 基本コマンド
 
 ```bash
-whirlwind --ralph [オプション...]
+whirlwind [オプション...]
 ```
 
 ### 利用可能なオプション
 
 | オプション              | 説明                                                              | デフォルト                               |
 | ----------------------- | ----------------------------------------------------------------- | ---------------------------------------- |
-| `--ralph`               | **必須**。Ralph モードを有効化する                                | `false`                                  |
 | `--config=<path>`       | 設定ファイルのパス                                                | `whirlwind.json`（なければプリセット使用） |
-| `--dev=<kind>`          | Builder（Dev ロール）の種類を上書き                               | `claude-code`                            |
-| `--review=<kind>`       | Review ロールの種類を上書き。**Ralph モードでは効かない（後述）** | `codex`                                  |
+| `--planner=<kind>`      | Planner エージェントの種類を上書き                                | `claude-code`                            |
+| `--builder=<kind>`      | Builder エージェントの種類を上書き                                | `claude-code`                            |
+| `--verifier=<kind>`     | Verifier エージェントの種類を上書き                               | `codex`                                  |
+| `--milestones=<path>`   | マイルストーンファイルのパス                                      | `.whirlwind/milestones.json`             |
 | `--lang=<auto\|ja\|en>` | エージェントの応答言語                                            | `auto`（環境変数 `LANG` から検出）       |
+| `--log=<path>`          | ログファイルのパス                                                | なし                                     |
 
-### エージェント種類 (`--dev`, `--review` に指定可能な値)
+### エージェント種類 (`--planner`, `--builder`, `--verifier` に指定可能な値)
 
 | 値                                      | 説明             |
 | --------------------------------------- | ---------------- |
 | `claude` / `claude-code` / `claudecode` | Claude Code      |
 | `codex`                                 | OpenAI Codex     |
-| `api`                                   | API バックエンド |
 | `mock`                                  | テスト用モック   |
 
 ### マイルストーンファイルのパス指定
 
-マイルストーンファイルのパスを CLI 引数で直接指定するオプションは**存在しない**。
-パスを変更するには、設定ファイル (`whirlwind.json`) の `milestones_path` を使う:
-
-```json
-{
-  "ralph_enabled": true,
-  "milestones_path": "path/to/my-milestones.json",
-  "agents": [ ... ]
-}
-```
-
-| 方法                                    | マイルストーンファイルのパス                                              |
-| --------------------------------------- | ------------------------------------------------------------------------- |
-| `whirlwind --ralph` (設定なし)            | `.whirlwind/milestones.json` 固定                                           |
-| `whirlwind --ralph --config=whirlwind.json` | 設定ファイル内の `milestones_path`（省略時は `.whirlwind/milestones.json`） |
-| ~~`whirlwind --ralph --milestones=...`~~  | **未実装（CLI フラグは存在しない）**                                      |
+| 方法                                           | マイルストーンファイルのパス                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------------- |
+| `whirlwind` (設定なし)                         | `.whirlwind/milestones.json` 固定                                           |
+| `whirlwind --config=whirlwind.json`            | 設定ファイル内の `milestones_path`（省略時は `.whirlwind/milestones.json`） |
+| `whirlwind --milestones=path/to/milestones.json` | CLI フラグで直接指定                                                      |
 
 ### 使用例
 
 ```bash
 # 最小構成（プリセット使用、.whirlwind/milestones.json を読み込む）
-whirlwind --ralph
+whirlwind
 
 # 設定ファイル指定（milestones_path もここで変更可能）
-whirlwind --ralph --config=whirlwind.json
+whirlwind --config=whirlwind.json
 
 # エージェント種類を上書き
-whirlwind --ralph --dev=codex --review=claude
+whirlwind --builder=codex --verifier=claude
 
 # 日本語で応答
-whirlwind --ralph --lang=ja
+whirlwind --lang=ja
 
 # フル指定
-whirlwind --ralph --config=my-config.json --dev=claude --review=codex --lang=ja
+whirlwind --config=my-config.json --builder=codex --lang=ja
 ```
 
 ---
@@ -142,34 +130,23 @@ whirlwind --ralph --config=my-config.json --dev=claude --review=codex --lang=ja
 
 ```json
 {
-  "project_dir": ".",
-  "review_dir": "docs/reviews",
-  "ralph_enabled": true,
   "milestones_path": ".whirlwind/milestones.json",
   "max_rework_attempts": 3,
-  "max_review_cycles": 3,
-  "review_interval": 1,
   "agents": [
     {
       "id": "planner",
       "kind": "claude-code",
-      "role": "planner",
-      "working_dir": ".",
-      "max_iterations": 10
+      "role": "planner"
     },
     {
       "id": "builder",
       "kind": "claude-code",
-      "role": "dev",
-      "working_dir": ".",
-      "max_iterations": 10
+      "role": "builder"
     },
     {
       "id": "verifier",
       "kind": "codex",
-      "role": "verifier",
-      "working_dir": ".",
-      "max_iterations": 5
+      "role": "verifier"
     }
   ]
 }
@@ -177,35 +154,26 @@ whirlwind --ralph --config=my-config.json --dev=claude --review=codex --lang=ja
 
 ### 設定フィールド一覧
 
-| フィールド            | 型      | デフォルト       | 説明                                                            |
-| --------------------- | ------- | ---------------- | --------------------------------------------------------------- |
-| `project_dir`         | string  | `"."`            | プロジェクトルートディレクトリ                                  |
-| `review_dir`          | string  | `"docs/reviews"` | レビュー出力ディレクトリ                                        |
-| `ralph_enabled`       | bool    | `false`          | Ralph モード有効化（`--ralph` フラグで自動 `true`）             |
-| `milestones_path`     | string? | `null`           | マイルストーンファイルパス（省略時 `.whirlwind/milestones.json`） |
-| `max_rework_attempts` | int     | `3`              | マイルストーン検証のリワーク最大回数                             |
-| `max_review_cycles`   | int     | `3`              | レビューサイクル上限（Ralph では未使用）                        |
-| `review_interval`     | int     | `1`              | レビュー間隔（Ralph では未使用）                                |
-| `agents`              | array   | `[]`             | エージェント設定の配列                                          |
+| フィールド            | 型      | デフォルト | 説明                                                            |
+| --------------------- | ------- | ---------- | --------------------------------------------------------------- |
+| `milestones_path`     | string? | `null`     | マイルストーンファイルパス（省略時 `.whirlwind/milestones.json`） |
+| `max_rework_attempts` | int     | `3`        | マイルストーン検証のリワーク最大回数                             |
+| `max_review_cycles`   | int     | `3`        | レビューサイクル上限                                            |
+| `review_interval`     | int     | `1`        | レビュー間隔                                                    |
+| `agents`              | array   | `[]`       | エージェント設定の配列                                          |
 
 ### エージェント設定フィールド
 
-| フィールド       | 型      | デフォルト | 説明                                                            |
-| ---------------- | ------- | ---------- | --------------------------------------------------------------- |
-| `id`             | string  | `""`       | エージェントの一意識別子                                        |
-| `kind`           | string  | `"mock"`   | `"claude-code"` / `"codex"` / `"api"` / `"mock"`                |
-| `role`           | string  | `"dev"`    | `"planner"` / `"dev"` / `"builder"` / `"verifier"` / `"review"` |
-| `model`          | string? | `null`     | 使用モデル名（省略可）                                          |
-| `system_prompt`  | string? | `null`     | カスタムシステムプロンプト（省略可）                            |
-| `working_dir`    | string  | `"."`      | 作業ディレクトリ                                                |
-| `max_iterations` | int     | `10`       | エージェント内部の反復上限                                      |
-
-> **Note:** `role` の `"builder"` は内部的に `Dev` ロールとして扱われる。
-> Planner から見た Builder も `Dev` ロールのエージェントを使用する。
+| フィールド | 型      | デフォルト | 説明                                                       |
+| ---------- | ------- | ---------- | ---------------------------------------------------------- |
+| `id`       | string  | `""`       | エージェントの一意識別子                                   |
+| `kind`     | string  | `"mock"`   | `"claude-code"` / `"codex"` / `"mock"`                     |
+| `role`     | string  | `"builder"`| `"planner"` / `"builder"` / `"verifier"` / `"review"`      |
+| `model`    | string? | `null`     | 使用モデル名（省略可）                                     |
 
 ### プリセット
 
-**preset_ralph()**: Ralph モード用（`--ralph` のみで起動し `whirlwind.json` がない場合）
+**preset_ralph()**: デフォルト（`whirlwind.json` がない場合に使用）
 
 | エージェント | ID         | Kind       | Role     |
 | ------------ | ---------- | ---------- | -------- |
@@ -213,12 +181,9 @@ whirlwind --ralph --config=my-config.json --dev=claude --review=codex --lang=ja
 | Builder      | `builder`  | ClaudeCode | Dev      |
 | Verifier     | `verifier` | Codex      | Verifier |
 
-その他のデフォルト: `max_rework_attempts`: 3, `ralph_enabled`: true
+その他のデフォルト: `max_rework_attempts`: 3
 
-**preset_default()**: 通常モード用
-
-- Dev(ClaudeCode) + Reviewer(Codex)
-- max_review_cycles: 3
+**preset_default()**: Builder(ClaudeCode) + Reviewer(Codex)
 
 ### バリデーションルール
 
@@ -226,8 +191,8 @@ whirlwind --ralph --config=my-config.json --dev=claude --review=codex --lang=ja
 
 - `agents` が空
 - エージェント `id` が重複
-- `Dev` ロールのエージェントが存在しない
-- `ralph_enabled: true` なのに `Planner` ロールのエージェントがない
+- `Builder` ロールのエージェントが存在しない
+- `Planner` ロールのエージェントが存在しない
 - `review_interval` が 1 未満
 
 ---
@@ -425,11 +390,11 @@ Wave 0 並列実行 → Wave 1 並列実行 → ... → 全 Wave 完了
 ### 7.1 起動シーケンス
 
 ```
-1. CLI 解析: --ralph フラグを検出
+1. CLI 解析
 2. 設定ロード:
-   a. --config 指定あり → ファイル読み込み → ralph_enabled=true に上書き
+   a. --config 指定あり → ファイル読み込み
    b. --config 指定なし → preset_ralph() を使用
-3. CLI オーバーライド適用: --dev, --review の値で agents の kind を上書き
+3. CLI オーバーライド適用: --planner, --builder, --verifier の値で agents の kind を上書き
 4. 設定バリデーション
 5. バックエンド生成: 各エージェントの kind に応じたバックエンドを作成
 6. マイルストーンロード:
@@ -474,13 +439,13 @@ RalphLoop::run()
 ### 7.3 アーキテクチャ図
 
 ```
-CLI (--ralph)
+CLI
   |
   parse_cli_args()
   |
   run_ralph()
     |-- Load config (whirlwind.json or preset_ralph)
-    |-- apply_overrides() [--dev, --review, --lang]
+    |-- apply_overrides() [--planner, --builder, --verifier]
     |-- Load milestones (.whirlwind/milestones.json)
     `-- RalphLoop::new()
           |-- backends[Planner, Builder, Verifier]
@@ -650,7 +615,7 @@ Markdown plan
            { "id": "m1", "goal": "...", "status": "pending", "summary": "", "tasks": [] }
          ]
        }
-  → whirlwind --ralph
+  → whirlwind
     → tasks が空の milestone ごとに Planner AI を実行
     → milestone 完了時に summary を生成して milestones.json に書き戻す
 ```
@@ -788,9 +753,6 @@ v0.6.0 でフィードバックルーティングを実装:
 task.description + "\n\nFeedback from verifier:\n" + "- feedback1\n- feedback2\n"
 ```
 
-> **通常モードとの一貫性:** 通常モードの `run_review()` も同様に
-> `task + "\n\nFeedback from review:\n" + feedback` を渡している。
-
 ---
 
 ## 10. 制御パラメータと終了条件
@@ -822,8 +784,6 @@ task.description + "\n\nFeedback from verifier:\n" + "- feedback1\n- feedback2\n
 4. 再度 `verify_wave()` を呼び出し（attempt + 1）- **再帰呼び出し**
 5. `attempt >= max_rework_attempts` の場合 → 強制承認（`true` を返す）
 6. 再び `NeedsRework` なら上記を繰り返す
-
-通常モードの終了条件・制御パラメータは [12. 通常モード詳細](#12-通常モード-heartbeat-loop-詳細) を参照。
 
 ---
 
@@ -874,165 +834,13 @@ task.description + "\n\nFeedback from verifier:\n" + "- feedback1\n- feedback2\n
 
 ---
 
-## 12. 通常モード (Heartbeat Loop) 詳細
-
-通常モードは `run_repl()` 内の **無限ループ** で動作する。
-`run_dev()` と `run_review()` を直接呼ぶ。
-終了は **Ctrl+C のみ**。Approved でも自動的に次タスクを生成して回り続ける。
-
-### 12.1 ループ構造
-
-```
-CLI (whirlwind plan.md --dev=codex --review=claude)
-  -> run_repl()
-    while true {                          // Ctrl+C まで永久に回る
-      1. check_interrupt()                // ユーザー入力チェック
-      2. run_dev(task)                    // Devエージェント実行
-      3. if dev_since_review < review_interval:
-           build_next_task() -> continue  // レビューせず次のdev
-      4. run_review(3 perspectives)       // 3観点レビュー
-      5. match result:
-           Approved  -> build_next_task() // 自動で次タスク生成 -> continue
-           Rejected  -> ユーザー入力待ち  // interrupt polling -> continue
-    }
-```
-
-**重要な特性:**
-- `review_interval` で N 回 dev してから 1 回 review（デフォルト: 1）
-- Approved 後は `build_next_task()` / `build_continuation_task()` で自動継続
-- Rejected 時は `check_interrupt()` でユーザー入力をポーリング待ち
-- セッション状態を `.whirlwind/session.json` に毎イテレーション保存（resume 可能）
-- `--rlm` フラグで improvement loop mode（measure -> improve -> verify -> commit/revert）
-- トークン使用量・コストを per-iteration / cumulative で追跡
-
-### 12.2 アーキテクチャ図
-
-```
-CLI (whirlwind plan.md --dev=codex --review=claude)
-  |
-  parse_cli_args()
-  |
-  run_repl()
-    |-- Load config (whirlwind.json or preset_default)
-    |-- apply_overrides() [--dev, --review, --lang]
-    |-- Create backends (Dev, Reviewer)
-    |-- Resume session? (.whirlwind/session.json)
-    |-- Get initial task (plan file / prompt / TODO files)
-    |-- start_stdin_watcher()
-    `-- while true {                          // INFINITE LOOP (Ctrl+C to stop)
-          |-- iteration++
-          |-- check_interrupt()               // user input from .whirlwind/interrupt.txt
-          |-- save_session(phase: "dev")
-          |-- run_dev(dev_id, task)            // Dev agent execution
-          |     `-- backend.run(task, on_event) -> dev_result
-          |-- if dev_result empty -> continue
-          |-- if dev_since_review < review_interval
-          |     `-- build_next_task() -> continue  // skip review
-          |-- save_session(phase: "review")
-          |-- run_review(task, dev_output)     // 3-perspective review
-          |     |-- ReviewAgent::review()
-          |     |-- if NeedsChanges:
-          |     |     `-- while cycle < max_cycles:
-          |     |           run_dev(feedback) -> re-review()  // rework loop
-          |     `-- -> Approved(summary) or Rejected(reason)
-          |-- save_session(phase: "idle")
-          `-- match result:
-                Approved  -> build_next_task() -> continue
-                Rejected  -> poll check_interrupt() until user input -> continue
-        }
-```
-
-### 12.3 レビューサイクル
-
-#### run_review() 内の rework ループ
-
-```
-run_review(dev_id, reviewer_id, backends, task, dev_output, max_cycles, ...)
-  -> ReviewAgent::review(task, backend)  // 3観点レビュー
-     -> CodeQuality, Performance, Security -> merge verdict
-  -> match verdict:
-       Approved -> ReviewOutcome::Approved
-       NeedsChanges(items) ->
-         while cycle < max_cycles {       // rework ループ (max_review_cycles)
-           feedback = items -> "- item1\n- item2\n"
-           rework_task = task + feedback
-           current_output = run_dev(rework_task)  // Dev に feedback 付きで再実行
-           re-review(current_output)
-           if Approved -> return Approved
-           if Rejected -> return Rejected
-           // NeedsChanges -> continue loop
-         }
-         -> NeedsChanges exhausted -> ReviewOutcome::Approved(latest_summary)
-       Rejected -> ReviewOutcome::Rejected
-```
-
-**通常モードでは review feedback が Dev に渡される** (Ralph と異なる点):
-- `run_review()` 内で `NeedsChanges(items)` を feedback 文字列に変換
-- `run_dev()` に `task + "\n\nFeedback from review:\n" + feedback` を渡す
-
-#### 3観点レビュー
-
-```
-ReviewAgent::review(task, backend)
-  -> CodeQuality: 可読性、命名、関心の分離、エラーハンドリング
-  -> Performance: 時間/空間計算量、N+1クエリ、キャッシング
-  -> Security: 入力バリデーション、インジェクション、認証
-  -> merge: 最初のRejected = 全体Rejected, else NeedsChanges統合
-```
-
-#### レビュー プロンプト構造
-
-```
-## Task
-[task description]
-
-## Agent Output
-[agent output]
-
-## Review Focus: [Perspective]
-- [aspect 1]
-- [aspect 2]
-
-## Important
-Your job is to identify issues as TODO list -- do NOT fix them.
-
-## Instructions
-Respond with EXACTLY ONE:
-- <approved>
-- <needs_changes>item1, item2</needs_changes>
-- <rejected>reason</rejected>
-```
-
-### 12.4 終了条件と制御パラメータ
-
-| 状態           | 終了条件                           | 動作                                 |
-| -------------- | ---------------------------------- | ------------------------------------ |
-| 外側ループ     | **Ctrl+C のみ**                    | `while true` で永久に回る            |
-| Dev実行        | run_dev() 完了                     | 出力が空なら review skip             |
-| Review skip    | dev_since_review < review_interval | build_next_task() で次 dev           |
-| Review内rework | cycle >= max_review_cycles         | rework 打ち切り                      |
-| Approved       | 自動                               | build_next_task() で次イテレーション |
-| Rejected       | ユーザー入力受領                   | check_interrupt() polling            |
-
-```
-通常モード制御パラメータ:
-  max_review_cycles: 3       run_review() 内の rework 上限
-  review_interval: 1         N回 dev したら 1回 review
-```
-
-> **Note:** 通常モードの外側ループ自体には終了条件がない。
-> `max_review_cycles` は `run_review()` 内の rework サイクル上限であり、
-> 外側ループの終了には影響しない。
-
----
-
-## 13. 設定ファイルサンプル集
+## 12. 設定ファイルサンプル集
 
 ### 最小構成（Planner + Builder のみ、Verifier なし）
 
 ```json
 {
-  "ralph_enabled": true,
+
   "agents": [
     { "id": "planner", "kind": "claude-code", "role": "planner" },
     { "id": "builder", "kind": "claude-code", "role": "dev" }
@@ -1048,7 +856,7 @@ Respond with EXACTLY ONE:
 {
   "project_dir": "/path/to/project",
   "review_dir": "docs/reviews",
-  "ralph_enabled": true,
+
   "milestones_path": "milestones/plan.json",
   "max_rework_attempts": 5,
   "agents": [
@@ -1080,7 +888,7 @@ Respond with EXACTLY ONE:
 
 ```json
 {
-  "ralph_enabled": true,
+
   "agents": [
     { "id": "planner", "kind": "claude-code", "role": "planner" },
     { "id": "builder", "kind": "codex", "role": "dev" },
@@ -1091,7 +899,7 @@ Respond with EXACTLY ONE:
 
 ---
 
-## 14. 既知の制限事項と残存課題
+## 13. 既知の制限事項と残存課題
 
 ### 14.1 ~~Verifier フィードバックが Builder に渡されない~~ → v0.6.0 で解決済み
 
@@ -1127,11 +935,10 @@ Ctrl+C で中断した場合は途中結果が失われる可能性がある。
 ```moonbit
 // types.mbt — AgentRole の定義
 pub(all) enum AgentRole {
-  Dev
-  Review          // <- 通常モードの Reviewer 用
-  Orchestrator
+  Builder
+  Review
   Planner
-  Verifier        // <- Ralph モードの Verifier 用（Review とは別の値）
+  Verifier
 }
 ```
 
@@ -1178,8 +985,7 @@ agent="verifier" (role=Verifier) → _ => agent.kind    変更なし
 
 ### 14.6 Ralph 固有の未使用設定項目
 
-`review_interval` と `max_review_cycles` は通常モード用で、Ralph モードでは使われない。
-設定ファイルに記述しても無視される。
+`review_interval` と `max_review_cycles` は設定ファイルに記述可能だが、現在のRalphモードでは使われない。
 
 ### 14.7 Verifier サイレント承認バグ
 
@@ -1197,7 +1003,7 @@ Verifier にはまだ適用されていない。
 
 ---
 
-## 15. 機能進化 (コミット履歴)
+## 14. 機能進化 (コミット履歴)
 
 | Phase | コミット        | 日付       | 機能                                                           |
 | ----- | --------------- | ---------- | -------------------------------------------------------------- |

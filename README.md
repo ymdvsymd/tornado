@@ -1,17 +1,20 @@
 # whirlwind
 
-Multi-agent development orchestrator with TUI.
+Multi-agent development orchestrator — milestone-driven autonomous development with Planner, Builder, and Verifier agents.
 
 ## Usage
 
 ### Pattern 1: Run with `npx`
 
 ```bash
-# run from a plan file (first positional arg must be an existing file)
-npx -y @ymdvsymd/whirlwind ./plan.md --dev=codex --review=claude
+# run with default preset (Planner=claude-code, Builder=claude-code, Verifier=codex)
+npx -y @ymdvsymd/whirlwind
 
-# run with explicit config
-npx -y @ymdvsymd/whirlwind --config=./whirlwind.json --dev=codex --review=claude
+# run with config file
+npx -y @ymdvsymd/whirlwind --config=./whirlwind.json
+
+# override agent kinds
+npx -y @ymdvsymd/whirlwind --builder=codex --verifier=claude-code
 
 # validate config
 npx -y @ymdvsymd/whirlwind validate ./whirlwind.json
@@ -22,32 +25,33 @@ npx -y @ymdvsymd/whirlwind validate ./whirlwind.json
 ```bash
 npm i -g @ymdvsymd/whirlwind
 
-# run from a plan file
-whirlwind ./plan.md --dev=codex --review=claude
+# run with default preset
+whirlwind
 
-# run with explicit config
-whirlwind --config=./whirlwind.json --dev=codex --review=claude
+# run with config file
+whirlwind --config=./whirlwind.json
+
+# override agent kinds
+whirlwind --builder=codex --lang=ja
 
 # validate config
 whirlwind validate ./whirlwind.json
 ```
 
-### Pattern 3: Ralph mode (milestone-driven autonomous development)
+## CLI flags
 
-```bash
-# run with default preset (Planner + Builder + Verifier)
-whirlwind --ralph
-
-# run with config file
-whirlwind --ralph --config=./whirlwind.json
-
-# override builder kind
-whirlwind --ralph --dev=codex --lang=ja
-```
+| Flag | Description |
+|------|-------------|
+| `--config=PATH` | Config file path |
+| `--planner=KIND` | Override planner agent kind |
+| `--builder=KIND` | Override builder agent kind |
+| `--verifier=KIND` | Override verifier agent kind |
+| `--milestones=PATH` | Milestones JSON file path |
+| `--lang=LANG` | Review language (`auto`/`ja`/`en`) |
+| `--log=PATH` | Log file path |
 
 ## Agent kind options
 
 - `claude` / `claude-code`
 - `codex`
-- `api`
 - `mock`

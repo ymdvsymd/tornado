@@ -181,10 +181,11 @@ Wave の実行結果を検証
 
 ```moonbit
 pub enum CliCommand {
-  Run(config_path~, plan_path~, dev_kind~, review_kind~,
-      review_interval~, rlm~, ralph~, lang~, warnings~)
+  Run(config_path~, planner_kind~, builder_kind~, verifier_kind~,
+      milestones_path~, lang~, log_path~, warnings~)
   Validate(String?)
   Help
+  Version
 }
 ```
 
@@ -193,12 +194,12 @@ pub enum CliCommand {
 | フラグ | 値 | 説明 |
 |--------|-----|------|
 | `--config=PATH` | ファイルパス | 設定ファイル |
-| `--dev=KIND` | claude-code/codex/api/mock | Dev エージェント種 |
-| `--review=KIND` | 同上 | Review エージェント種 |
-| `--review-interval=N` | 整数 | N回のdev後にreview |
-| `--rlm` | フラグ | Improvement Loop Mode |
-| `--ralph` | フラグ | Ralph Loop モード |
+| `--planner=KIND` | claude-code/codex/mock | Planner エージェント種 |
+| `--builder=KIND` | 同上 | Builder エージェント種 |
+| `--verifier=KIND` | 同上 | Verifier エージェント種 |
+| `--milestones=PATH` | ファイルパス | マイルストーンJSONパス |
 | `--lang=LANG` | auto/ja/en | レビュー言語 |
+| `--log=PATH` | ファイルパス | ログファイルパス |
 
 ### apply_overrides()
 
@@ -214,14 +215,11 @@ CLI フラグを ProjectConfig にマージ
 
 ```moonbit
 pub struct ProjectConfig {
-  project_dir: String          // default: "."
-  review_dir: String           // default: "docs/reviews"
   max_review_cycles: Int       // default: 3
   review_interval: Int         // default: 1
   agents: Array[AgentConfig]
   parse_warnings: Array[String]
-  ralph_enabled: Bool          // default: false
-  milestones_path: String?     // default: ".whirlwind/milestones.json"
+  milestones_path: String?
   max_rework_attempts: Int     // default: 3
 }
 ```
@@ -229,14 +227,14 @@ pub struct ProjectConfig {
 ### バリデーション
 
 - エージェントID重複チェック
-- Devエージェント必須
-- ralph_enabled時、Plannerエージェント必須
-- unknown kind/role -> Warning + デフォルト値(Mock/Dev)
+- Builderエージェント必須
+- Plannerエージェント必須
+- unknown kind/role -> Warning + デフォルト値(Mock/Builder)
 
 ### プリセット
 
-- `preset_default()`: Dev(ClaudeCode) + Reviewer(Codex)
-- `preset_ralph()`: Planner(CC) + Builder(CC) + Verifier(Codex)
+- `preset_default()`: Builder(ClaudeCode) + Reviewer(Codex)
+- `preset_ralph()`: Planner(ClaudeCode) + Builder(ClaudeCode) + Verifier(Codex)
 
 ---
 

@@ -25,12 +25,10 @@ Whirlwind は **MoonBit** で実装されたマルチエージェント開発オ
 | ランタイム | Node.js >= 18 |
 | 配布 | npm (@ymdvsymd/whirlwind) |
 
-### 2つの実行モード
+### 実行モード
 
-1. **通常モード** (Heartbeat Loop): `run_repl()` 内の `while true` 無限ループで `run_dev()` → `run_review()` を繰り返す自律開発ループ（Ctrl+C で終了）
-2. **Ralph モード** (`--ralph`): マイルストーン駆動自律開発（Planner → Builder → Verifier）
-
-> **Note:** 通常モードは `run_repl()` が直接制御している。
+**Ralph モード**: マイルストーン駆動自律開発（Planner → Builder → Verifier）。
+全マイルストーン完了で自動終了。
 
 ---
 
