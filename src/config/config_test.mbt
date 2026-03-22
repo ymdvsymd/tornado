@@ -13,7 +13,7 @@ test "ProjectConfig::from_json_string parses basic config" {
   assert_true(config.agents.length() == 2)
   inspect(config.agents[0].id, content="dev-1")
   inspect(config.agents[0].kind, content="ClaudeCode")
-  inspect(config.agents[0].role, content="Dev")
+  inspect(config.agents[0].role, content="Builder")
   inspect(config.agents[1].id, content="review-1")
   inspect(config.agents[1].kind, content="Codex")
   inspect(config.agents[1].role, content="Review")
@@ -109,8 +109,8 @@ test "parse warns on unknown agent role" {
   assert_true(config.parse_warnings.length() == 1)
   assert_true(config.parse_warnings[0].contains("unknown role"))
   assert_true(config.parse_warnings[0].contains("reviewer"))
-  // Should default to Dev
-  inspect(config.agents[0].role, content="Dev")
+  // Should default to Builder
+  inspect(config.agents[0].role, content="Builder")
 }
 
 ///|
@@ -211,7 +211,7 @@ test "parse planner and verifier roles" {
   let config = @config.ProjectConfig::from_json_string(json)
   assert_true(config.parse_warnings.is_empty())
   inspect(config.agents[0].role, content="Planner")
-  inspect(config.agents[1].role, content="Dev")
+  inspect(config.agents[1].role, content="Builder")
   inspect(config.agents[2].role, content="Verifier")
 }
 
@@ -282,6 +282,6 @@ test "ProjectConfig::preset_ralph" {
   assert_true(config.ralph_enabled)
   assert_true(config.agents.length() == 3)
   inspect(config.agents[0].role, content="Planner")
-  inspect(config.agents[1].role, content="Dev")
+  inspect(config.agents[1].role, content="Builder")
   inspect(config.agents[2].role, content="Verifier")
 }

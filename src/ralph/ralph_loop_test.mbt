@@ -9,7 +9,7 @@ fn make_ralph_config(ralph_enabled? : Bool = true) -> @config.ProjectConfig {
   let builder_agent : @types.AgentConfig = {
     id: "builder",
     kind: Mock,
-    role: Dev,
+    role: Builder,
     model: None,
   }
   let verifier_agent : @types.AgentConfig = {
@@ -550,7 +550,7 @@ test "RalphLoop without verifier auto-approves" {
   let builder_agent : @types.AgentConfig = {
     id: "builder",
     kind: Mock,
-    role: Dev,
+    role: Builder,
     model: None,
   }
   let planner_agent : @types.AgentConfig = {
@@ -1520,7 +1520,7 @@ test "verify_milestone reaches max rework attempts and accepts as-is" {
   let builder_agent : @types.AgentConfig = {
     id: "builder",
     kind: Mock,
-    role: Dev,
+    role: Builder,
     model: None,
   }
   let verifier_agent : @types.AgentConfig = {
@@ -1650,7 +1650,7 @@ test "next_wave_number skips completed waves and jumps to pending wave" {
 
 ///|
 test "run_wave returns false when no builder backend is available" {
-  // Config has no Dev agent
+  // Config has no Builder agent
   let planner_agent : @types.AgentConfig = {
     id: "planner",
     kind: Mock,

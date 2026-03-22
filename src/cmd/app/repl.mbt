@@ -45,7 +45,7 @@ fn run_repl(
   log("BOOT", "Review language: \{lang}")
   println("")
   let backends = @agent.create_backends(config.agents)
-  let dev_id = find_agent_id(config.agents, @types.AgentRole::Dev)
+  let dev_id = find_agent_id(config.agents, @types.AgentRole::Builder)
   let reviewer_id = find_agent_id(config.agents, @types.AgentRole::Review)
   let agent_sessions : Map[String, String] = {}
   let mut iteration = 0
@@ -200,8 +200,8 @@ fn run_repl(
     }
     // ── Skip review if dev produced no output (likely failed) ──
     if dev_result.trim().is_empty() {
-      log("HEARTBEAT", "Dev produced no output, skipping review")
-      last_review_summary = "Dev agent produced no output - likely failed"
+      log("HEARTBEAT", "Builder produced no output, skipping review")
+      last_review_summary = "Builder agent produced no output - likely failed"
       save_session(@helpers.SessionState::{
         iteration,
         phase: "idle",
@@ -218,9 +218,9 @@ fn run_repl(
     if dev_since_review < config.review_interval {
       log(
         "HEARTBEAT",
-        "Dev \{dev_since_review}/\{config.review_interval} before review",
+        "Builder \{dev_since_review}/\{config.review_interval} before review",
       )
-      log("SUMMARY", "Dev output: \{@display.truncate(dev_result, 300)}")
+      log("SUMMARY", "Builder output: \{@display.truncate(dev_result, 300)}")
       log("HEARTBEAT", "=== Iteration \{iteration} complete (no review) ===")
       log(
         "USAGE",

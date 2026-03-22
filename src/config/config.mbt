@@ -34,11 +34,11 @@ fn parse_agent_kind(s : String) -> @types.AgentKind {
 /// Parse AgentRole from string
 fn parse_agent_role(s : String) -> @types.AgentRole {
   match s {
-    "dev" | "builder" => Dev
+    "dev" | "builder" => Builder
     "review" => Review
     "planner" => Planner
     "verifier" => Verifier
-    _ => Dev
+    _ => Builder
   }
 }
 
@@ -59,7 +59,7 @@ fn parse_agent_config(
   let role_str = @util.get_string(json, "role", "dev")
   if not(valid_agent_roles.contains(role_str)) {
     warnings.push(
-      "Agent '\{id}': unknown role '\{role_str}', defaulting to Dev",
+      "Agent '\{id}': unknown role '\{role_str}', defaulting to Builder",
     )
   }
   let role = parse_agent_role(role_str)
@@ -131,7 +131,7 @@ pub fn ProjectConfig::preset_default() -> ProjectConfig {
   let dev : @types.AgentConfig = {
     id: "dev",
     kind: ClaudeCode,
-    role: Dev,
+    role: Builder,
     model: None,
   }
   let reviewer : @types.AgentConfig = {
@@ -163,7 +163,7 @@ pub fn ProjectConfig::preset_ralph() -> ProjectConfig {
   let builder : @types.AgentConfig = {
     id: "builder",
     kind: ClaudeCode,
-    role: Dev,
+    role: Builder,
     model: None,
   }
   let verifier : @types.AgentConfig = {
@@ -208,9 +208,9 @@ pub fn ProjectConfig::validate(self : ProjectConfig) -> Array[String] {
     ids[agent.id] = true
   }
   // Check for at least one dev agent
-  let has_dev = self.agents.iter().any(fn(a) { a.role == Dev })
-  if not(has_dev) && not(self.agents.is_empty()) {
-    errors.push("No dev agent configured")
+  let has_builder = self.agents.iter().any(fn(a) { a.role == Builder })
+  if not(has_builder) && not(self.agents.is_empty()) {
+    errors.push("No builder agent configured")
   }
   // Ralph-specific validation
   if self.ralph_enabled {

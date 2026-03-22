@@ -65,7 +65,7 @@ pub fn apply_overrides(
   let agents : Array[@types.AgentConfig] = []
   for agent in config.agents {
     let kind = match agent.role {
-      Dev =>
+      Builder =>
         match dev_kind {
           Some(k) => k
           None => agent.kind

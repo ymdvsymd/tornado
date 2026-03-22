@@ -181,8 +181,8 @@ fn RalphLoop::run_wave(
     emit_info(self, "Wave \{wave}: all tasks already done, skipping")
     return true
   }
-  // Find builder backend (first Dev agent)
-  let builder_id = find_agent_id(self.config, @types.AgentRole::Dev)
+  // Find builder backend (first Builder agent)
+  let builder_id = find_agent_id(self.config, @types.AgentRole::Builder)
   let builder_backend = match builder_id {
     Some(id) => find_backend(self.backends, id)
     None => None
@@ -374,7 +374,7 @@ fn RalphLoop::rework_task_list(
     }
   }
 
-  let builder_id = find_agent_id(self.config, @types.AgentRole::Dev)
+  let builder_id = find_agent_id(self.config, @types.AgentRole::Builder)
   let builder_backend = match builder_id {
     Some(id) => find_backend(self.backends, id)
     None => None

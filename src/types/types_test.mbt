@@ -88,7 +88,7 @@ test "AgentKind show" {
 
 ///|
 test "AgentRole show" {
-  inspect(@types.AgentRole::Dev, content="Dev")
+  inspect(@types.AgentRole::Builder, content="Builder")
   inspect(@types.AgentRole::Review, content="Review")
 }
 

@@ -424,7 +424,7 @@ test "apply_overrides rewrites role kinds" {
   )
 
   assert_true(updated.agents.length() == 2)
-  inspect(updated.agents[0].role, content="Dev")
+  inspect(updated.agents[0].role, content="Builder")
   inspect(updated.agents[0].kind, content="Codex")
   inspect(updated.agents[1].role, content="Review")
   inspect(updated.agents[1].kind, content="ClaudeCode")

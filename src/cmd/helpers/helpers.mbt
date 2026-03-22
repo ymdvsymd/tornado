@@ -61,7 +61,7 @@ pub fn join_dev_outputs(outputs : Array[String]) -> String {
   let mut i = 0
   for output in outputs {
     i += 1
-    buf.write_string("### Dev Iteration \{i}\n")
+    buf.write_string("### Builder Iteration \{i}\n")
     buf.write_string(output)
     buf.write_string("\n\n")
   }
@@ -80,7 +80,7 @@ pub fn build_cycle_summary(
   let mut i = 0
   for output in dev_outputs {
     i += 1
-    buf.write_string("### Dev Step \{i}\n")
+    buf.write_string("### Builder Step \{i}\n")
     buf.write_string(truncate_str(output, 1000))
     buf.write_string("\n\n")
   }

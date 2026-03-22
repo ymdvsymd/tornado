@@ -9,7 +9,7 @@ pub(all) enum AgentKind {
 ///|
 /// Agent role in the orchestration
 pub(all) enum AgentRole {
-  Dev
+  Builder
   Review
   Planner
   Verifier

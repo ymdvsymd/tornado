@@ -103,16 +103,16 @@ test "join_dev_outputs with empty array" {
 ///|
 test "join_dev_outputs with single output" {
   let result = @helpers.join_dev_outputs(["Fixed bug in parser"])
-  assert_true(result.contains("### Dev Iteration 1"))
+  assert_true(result.contains("### Builder Iteration 1"))
   assert_true(result.contains("Fixed bug in parser"))
 }
 
 ///|
 test "join_dev_outputs with multiple outputs" {
   let result = @helpers.join_dev_outputs(["output1", "output2", "output3"])
-  assert_true(result.contains("### Dev Iteration 1"))
-  assert_true(result.contains("### Dev Iteration 2"))
-  assert_true(result.contains("### Dev Iteration 3"))
+  assert_true(result.contains("### Builder Iteration 1"))
+  assert_true(result.contains("### Builder Iteration 2"))
+  assert_true(result.contains("### Builder Iteration 3"))
   assert_true(result.contains("output1"))
   assert_true(result.contains("output2"))
   assert_true(result.contains("output3"))
@@ -124,7 +124,7 @@ test "join_dev_outputs with multiple outputs" {
 test "build_cycle_summary basic" {
   let result = @helpers.build_cycle_summary(1, ["dev output 1"], "review ok")
   assert_true(result.contains("## Cycle 1 Summary"))
-  assert_true(result.contains("### Dev Step 1"))
+  assert_true(result.contains("### Builder Step 1"))
   assert_true(result.contains("dev output 1"))
   assert_true(result.contains("### Review"))
   assert_true(result.contains("review ok"))
@@ -134,15 +134,15 @@ test "build_cycle_summary basic" {
 test "build_cycle_summary with empty review" {
   let result = @helpers.build_cycle_summary(2, ["output"], "")
   assert_true(result.contains("## Cycle 2 Summary"))
-  assert_true(result.contains("### Dev Step 1"))
+  assert_true(result.contains("### Builder Step 1"))
   assert_false(result.contains("### Review"))
 }
 
 ///|
 test "build_cycle_summary with multiple dev outputs" {
   let result = @helpers.build_cycle_summary(3, ["a", "b"], "ok")
-  assert_true(result.contains("### Dev Step 1"))
-  assert_true(result.contains("### Dev Step 2"))
+  assert_true(result.contains("### Builder Step 1"))
+  assert_true(result.contains("### Builder Step 2"))
   assert_true(result.contains("a"))
   assert_true(result.contains("b"))
 }
