@@ -1366,3 +1366,429 @@ test "tornado-1fy: detect_wave_file_conflicts returns empty for no overlaps" {
   let conflicts = @ralph.detect_wave_file_conflicts(results)
   assert_true(conflicts.is_empty())
 }
+
+///|
+test "run_wave with 3 parallel builders causing multi-file conflicts" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Refactor config", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Update config parser", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Add config validator", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t3", "description": "Migrate config format", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  // All three builders touch config.ts; t1 and t3 also both touch schema.ts
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Done\nFILES_CHANGED: src/config.ts, src/parser.ts",
+  )
+  builder_mock.add_response(
+    "Add config validator", "Done\nFILES_CHANGED: src/config.ts, src/validator.ts",
+  )
+  builder_mock.add_response(
+    "Migrate config format", "Done\nFILES_CHANGED: src/config.ts, src/parser.ts",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // config.ts is touched by all 3 tasks — must report conflict with 3 task IDs
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("File conflict") && msg.contains("config.ts") }),
+  )
+  // parser.ts is touched by t1 and t3 — must also report conflict
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("File conflict") && msg.contains("parser.ts") }),
+  )
+  // validator.ts is touched only by t2 — no conflict reported for it
+  assert_true(
+    not(
+      infos
+      .iter()
+      .any(fn(msg) {
+        msg.contains("File conflict") && msg.contains("validator.ts")
+      }),
+    ),
+  )
+  // Milestone should still complete (conflicts are informational, not blocking)
+  inspect(mgr.milestones[0].status, content="Done")
+}
+
+///|
+test "verify_milestone reaches max rework attempts and accepts as-is" {
+  // Use max_rework_attempts=2 to test the exact boundary
+  let planner_agent : @types.AgentConfig = {
+    id: "planner",
+    kind: Mock,
+    role: Planner,
+    model: None,
+    system_prompt: None,
+    working_dir: ".",
+    max_iterations: 10,
+  }
+  let builder_agent : @types.AgentConfig = {
+    id: "builder",
+    kind: Mock,
+    role: Dev,
+    model: None,
+    system_prompt: None,
+    working_dir: ".",
+    max_iterations: 10,
+  }
+  let verifier_agent : @types.AgentConfig = {
+    id: "verifier",
+    kind: Mock,
+    role: Verifier,
+    model: None,
+    system_prompt: None,
+    working_dir: ".",
+    max_iterations: 10,
+  }
+  let config : @config.ProjectConfig = {
+    project_dir: ".",
+    review_dir: "docs/reviews",
+    max_review_cycles: 3,
+    review_interval: 1,
+    agents: [planner_agent, builder_agent, verifier_agent],
+    parse_warnings: [],
+    ralph_enabled: true,
+    milestones_path: None,
+    max_rework_attempts: 2,
+  }
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement feature", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  // Verifier always returns needs_rework — never approves
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<needs_rework>m1-t1: still broken</needs_rework>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Max rework should be reached and milestone accepted as-is
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("Max rework attempts reached") }),
+  )
+  // Milestone should be Done (accepted as-is), not Failed
+  inspect(mgr.milestones[0].status, content="Done")
+  // Should see 3 verification attempts (attempt 0, 1, 2) where attempt 2 >= max_rework_attempts=2
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("Verifying milestone m1 (attempt 1)") }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("Verifying milestone m1 (attempt 2)") }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("Verifying milestone m1 (attempt 3)") }),
+  )
+}
+
+///|
+test "next_wave_number skips completed waves and jumps to pending wave" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Create schema", "wave": 0, "status": "done", "result": "already done" },
+    #|        { "id": "m1-t2", "description": "Write tests", "wave": 0, "status": "done", "result": "already done" },
+    #|        { "id": "m1-t3", "description": "Add handlers", "wave": 1, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="fresh result")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Wave 0 should never be executed (all tasks done, next_wave_number skips it)
+  assert_true(
+    not(infos.iter().any(fn(msg) { msg.contains("Executing wave 0") })),
+  )
+  // Wave 1 should be executed
+  assert_true(infos.iter().any(fn(msg) { msg.contains("Executing wave 1") }))
+  // Builder should only be called for wave 1's pending task
+  let history = builder_mock.get_history()
+  assert_true(history.length() == 1)
+  inspect(history[0].0, content="Add handlers")
+  // Milestone should complete
+  inspect(mgr.milestones[0].status, content="Done")
+}
+
+///|
+test "run_wave returns false when no builder backend is available" {
+  // Config has no Dev agent
+  let planner_agent : @types.AgentConfig = {
+    id: "planner",
+    kind: Mock,
+    role: Planner,
+    model: None,
+    system_prompt: None,
+    working_dir: ".",
+    max_iterations: 10,
+  }
+  let verifier_agent : @types.AgentConfig = {
+    id: "verifier",
+    kind: Mock,
+    role: Verifier,
+    model: None,
+    system_prompt: None,
+    working_dir: ".",
+    max_iterations: 10,
+  }
+  let config : @config.ProjectConfig = {
+    project_dir: ".",
+    review_dir: "docs/reviews",
+    max_review_cycles: 3,
+    review_interval: 1,
+    agents: [planner_agent, verifier_agent],
+    parse_warnings: [],
+    ralph_enabled: true,
+    milestones_path: None,
+    max_rework_attempts: 3,
+  }
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Create schema", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Milestone should fail because no builder backend found
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("No builder backend found") }),
+  )
+}
+
+///|
+test "verify_milestone fails after rework when re-verify returns milestone_failed" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done v1")
+  builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  // First verification (attempt 0): needs_rework
+  verifier_mock.add_response(
+    "Done v1", "<needs_rework>m1-t1: missing error handling</needs_rework>",
+  )
+  // Second verification (attempt 1) after rework: milestone_failed
+  verifier_mock.add_response(
+    "REWORKED", "<milestone_failed>Fundamental design flaw after rework</milestone_failed>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Milestone should be Failed, not Done
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
+  // Should have rework and then failure info
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("rework needed") || msg.contains("Rework needed")
+    }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("Milestone failed") || msg.contains("failed") }),
+  )
+}
+
+///|
+test "detect_wave_file_conflicts with 3 tasks all sharing the same file" {
+  let results : Array[(@types.RalphTask, Array[String])] = []
+  let t1 : @types.RalphTask = {
+    id: "m1-t1",
+    description: "task 1",
+    wave: 0,
+    status: Done,
+    result: None,
+    plan_doc: None,
+  }
+  let t2 : @types.RalphTask = {
+    id: "m1-t2",
+    description: "task 2",
+    wave: 0,
+    status: Done,
+    result: None,
+    plan_doc: None,
+  }
+  let t3 : @types.RalphTask = {
+    id: "m1-t3",
+    description: "task 3",
+    wave: 0,
+    status: Done,
+    result: None,
+    plan_doc: None,
+  }
+  results.push((t1, ["shared.ts", "a.ts"]))
+  results.push((t2, ["shared.ts", "b.ts"]))
+  results.push((t3, ["shared.ts", "c.ts"]))
+  let conflicts = @ralph.detect_wave_file_conflicts(results)
+  // shared.ts should be the only conflict, with all 3 task IDs
+  assert_true(conflicts.length() == 1)
+  let (file, task_ids) = conflicts[0]
+  inspect(file, content="shared.ts")
+  assert_true(task_ids.length() == 3)
+  assert_true(task_ids.contains("m1-t1"))
+  assert_true(task_ids.contains("m1-t2"))
+  assert_true(task_ids.contains("m1-t3"))
+}
+
+///|
+test "extract_changed_files handles multiple FILES_CHANGED lines" {
+  let result = "Step 1\nFILES_CHANGED: a.ts, b.ts\nStep 2\nFILES_CHANGED: c.ts\nDone."
+  let files = @ralph.extract_changed_files(result)
+  // Both lines should be parsed
+  assert_true(files.length() == 3)
+  assert_true(files.contains("a.ts"))
+  assert_true(files.contains("b.ts"))
+  assert_true(files.contains("c.ts"))
+}
+
+///|
+test "extract_changed_files handles whitespace around file names" {
+  let result = "FILES_CHANGED:  src/a.ts ,  src/b.ts  "
+  let files = @ralph.extract_changed_files(result)
+  assert_true(files.length() == 2)
+  assert_true(files.contains("src/a.ts"))
+  assert_true(files.contains("src/b.ts"))
+}
+
+///|
+test "single task wave does not trigger conflict detection" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build feature", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Build auth module", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Done\nFILES_CHANGED: package.json, src/config.ts",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // With only 1 task, the conflict detection block is skipped entirely
+  assert_true(
+    not(
+      infos
+      .iter()
+      .any(fn(msg) {
+        msg.contains("file conflict") || msg.contains("File conflict")
+      }),
+    ),
+  )
+  inspect(mgr.milestones[0].status, content="Done")
+}
