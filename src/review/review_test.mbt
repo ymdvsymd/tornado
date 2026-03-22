@@ -152,38 +152,6 @@ test "ReviewAgent::perspectives returns 3" {
 }
 
 ///|
-test "ReviewAgent::format_review approved" {
-  let ra = @review.ReviewAgent::new("r1", "en")
-  let task = @types.Task::new("t1", "build API")
-  let review : @types.ReviewResult = {
-    reviewer_id: "r1",
-    verdict: @types.ReviewVerdict::Approved,
-    summary: "Good work",
-    file_path: "",
-  }
-  let md = ra.format_review(task, review)
-  assert_true(md.contains("**APPROVED**"))
-  assert_true(md.contains("build API"))
-  assert_true(md.contains("Good work"))
-}
-
-///|
-test "ReviewAgent::format_review needs_changes" {
-  let ra = @review.ReviewAgent::new("r1", "en")
-  let task = @types.Task::new("t1", "build API")
-  let review : @types.ReviewResult = {
-    reviewer_id: "r1",
-    verdict: @types.ReviewVerdict::NeedsChanges(["fix tests", "add docs"]),
-    summary: "Almost there",
-    file_path: "",
-  }
-  let md = ra.format_review(task, review)
-  assert_true(md.contains("**NEEDS CHANGES**"))
-  assert_true(md.contains("- fix tests"))
-  assert_true(md.contains("- add docs"))
-}
-
-///|
 test "ReviewAgent::parse_verdict prefers approved over needs_changes" {
   let ra = @review.ReviewAgent::new("r1", "en")
   // <approved> appears before <needs_changes>, so approved wins

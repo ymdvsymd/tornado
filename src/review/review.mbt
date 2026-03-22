@@ -227,34 +227,6 @@ fn ReviewAgent::build_system_prompt(
   }
 }
 
-///|
-/// Build review file content as markdown
-pub fn ReviewAgent::format_review(
-  _self : ReviewAgent,
-  task : @types.Task,
-  review : @types.ReviewResult,
-) -> String {
-  let buf = StringBuilder::new()
-  buf.write_string("# Review: \{task.id}\n\n")
-  buf.write_string("## Task\n")
-  buf.write_string(task.description)
-  buf.write_string("\n\n## Verdict\n")
-  match review.verdict {
-    Approved => buf.write_string("**APPROVED**\n")
-    NeedsChanges(items) => {
-      buf.write_string("**NEEDS CHANGES**\n")
-      for item in items {
-        buf.write_string("- \{item}\n")
-      }
-    }
-    Rejected(reason) => buf.write_string("**REJECTED**: \{reason}\n")
-  }
-  buf.write_string("\n## Summary\n")
-  buf.write_string(review.summary)
-  buf.write_string("\n")
-  buf.to_string()
-}
-
 ///| Extract content between XML-style tags.
 
 ///| Searches for the close tag starting from after the open tag,
