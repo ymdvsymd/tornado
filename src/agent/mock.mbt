@@ -77,16 +77,6 @@ pub fn MockBackend::boxed(self : MockBackend) -> BoxedBackend {
 }
 
 ///|
-/// Create a MockBackend that always fails
-pub fn MockBackend::failing(error_msg : String) -> MockBackend {
-  {
-    responses: { "": error_msg },
-    default_response: error_msg,
-    call_history: [],
-  }
-}
-
-///|
 /// FailingMockBackend always returns a failure
 pub struct FailingMockBackend {
   error_msg : String
