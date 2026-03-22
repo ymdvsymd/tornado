@@ -114,22 +114,22 @@ test "parse_cli_args -v flag" {
 
 ///|
 test "parse_cli_args --log=path" {
-  let args = ["whirlwind", "--log=/tmp/tornado.log"]
+  let args = ["whirlwind", "--log=/tmp/whirlwind.log"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(log_path~, ..) =>
-      inspect(log_path, content="Some(\"/tmp/tornado.log\")")
+      inspect(log_path, content="Some(\"/tmp/whirlwind.log\")")
     _ => panic()
   }
 }
 
 ///|
 test "parse_cli_args --log path" {
-  let args = ["whirlwind", "--log", "/tmp/tornado.log"]
+  let args = ["whirlwind", "--log", "/tmp/whirlwind.log"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(log_path~, ..) =>
-      inspect(log_path, content="Some(\"/tmp/tornado.log\")")
+      inspect(log_path, content="Some(\"/tmp/whirlwind.log\")")
     _ => panic()
   }
 }
