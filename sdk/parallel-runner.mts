@@ -1,5 +1,9 @@
 import { runAdapter } from "./agent-runner.mjs";
-import type { AdapterIO, AgentAdapter, RunnerOptions } from "./agent-adapter.mjs";
+import type {
+  AdapterIO,
+  AgentAdapter,
+  RunnerOptions,
+} from "./agent-adapter.mjs";
 import { createClaudeAdapter } from "./claude-adapter.mjs";
 import { createCodexAdapter } from "./codex-adapter.mjs";
 
@@ -23,9 +27,7 @@ const results = await Promise.allSettled(
 
 process.stdout.write(`${JSON.stringify(results.map(formatSettledResult))}\n`);
 
-function createAdapter(
-  runner: ParallelRunnerName,
-): AgentAdapter<unknown> {
+function createAdapter(runner: ParallelRunnerName): AgentAdapter<unknown> {
   switch (runner) {
     case "claude":
       return createClaudeAdapter();

@@ -34,7 +34,9 @@ type ClaudeMessage = {
 export function createClaudeAdapter(): AgentAdapter<ClaudeMessage> {
   return {
     tag: "Claude",
-    async start(opts: RunnerOptions): Promise<AdapterStartResult<ClaudeMessage>> {
+    async start(
+      opts: RunnerOptions,
+    ): Promise<AdapterStartResult<ClaudeMessage>> {
       const queryOpts = buildQueryOptions(opts);
       return {
         sessionId: opts.sessionId || "",

@@ -63,9 +63,9 @@ export function createCodexAdapter(
       const codexClientOpts = opts.systemPrompt
         ? { config: { developer_instructions: opts.systemPrompt } }
         : undefined;
-      const client = new (deps.CodexClient || (Codex as unknown as CodexClientConstructor))(
-        codexClientOpts,
-      );
+      const client = new (
+        deps.CodexClient || (Codex as unknown as CodexClientConstructor)
+      )(codexClientOpts);
       const threadOpts: CodexThreadOptions = {
         model: opts.model || undefined,
         workingDirectory: opts.cwd || process.cwd(),
@@ -135,20 +135,26 @@ function startThread(
   return client.startThread(opts);
 }
 
-function emitItemStart(item: CodexItem | undefined): readonly AdapterEmission[] {
+function emitItemStart(
+  item: CodexItem | undefined,
+): readonly AdapterEmission[] {
   const normalized = normalizeItemStart(item || {});
   if (!normalized) return [];
-  const display = typeof normalized._display === "string"
-    ? normalized._display
-    : item?.type || "item.started";
+  const display =
+    typeof normalized._display === "string"
+      ? normalized._display
+      : item?.type || "item.started";
   return [{ event: normalized, log: display }];
 }
 
-function emitItemComplete(item: CodexItem | undefined): readonly AdapterEmission[] {
+function emitItemComplete(
+  item: CodexItem | undefined,
+): readonly AdapterEmission[] {
   const normalized = normalizeItemComplete(item || {});
   if (!normalized) return [];
-  const display = typeof normalized._display === "string"
-    ? normalized._display
-    : item?.type || "item.completed";
+  const display =
+    typeof normalized._display === "string"
+      ? normalized._display
+      : item?.type || "item.completed";
   return [{ event: normalized, log: `Done: ${display}` }];
 }

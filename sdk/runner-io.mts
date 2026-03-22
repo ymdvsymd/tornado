@@ -1,4 +1,7 @@
-export function writeJsonl(event: unknown, stream: NodeJS.WritableStream = process.stdout): void {
+export function writeJsonl(
+  event: unknown,
+  stream: NodeJS.WritableStream = process.stdout,
+): void {
   stream.write(`${JSON.stringify(event)}\n`);
 }
 
