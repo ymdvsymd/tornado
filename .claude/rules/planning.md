@@ -10,4 +10,4 @@
 
 計画ファイル作成時、検証セクション（Verification Steps 等）には `just live`（実エージェントを使った結合テスト）を必ず含めること。`just test` と `just mock` だけでは不十分。
 
-mock テストだけでは実エージェント環境での問題（CLAUDECODE 環境変数問題等）を検出できない。/ralph-tornado 実行時のマイルストーンにも含める。
+mock テストだけでは実エージェント環境での問題（CLAUDECODE 環境変数問題等）を検出できない。/ralph-whirlwind 実行時のマイルストーンにも含める。

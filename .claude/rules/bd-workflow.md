@@ -9,9 +9,9 @@
 3. 実装時にチケットを claim (`bd update <id> --claim`)
 4. 完了したらチケットをクローズ (`bd close <id>`)
 
-## /ralph-tornado 実行時のチケット必須化
+## /ralph-whirlwind 実行時のチケット必須化
 
-/ralph-tornado で plan 実行する際は、必ず bd チケットを起票し、計画全体の内容を description に記載すること。完了時にクローズする。チケットなしでの実行は禁止。
+/ralph-whirlwind で plan 実行する際は、必ず bd チケットを起票し、計画全体の内容を description に記載すること。完了時にクローズする。チケットなしでの実行は禁止。
 
 ## 結合テストでバグ発見時は bd チケットを起票
 

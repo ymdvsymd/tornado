@@ -112,13 +112,13 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    ### Batch 1 (並列)
    | ID | 優先度 | 種別 | タイトル |
    |----|--------|------|---------|
-   | tornado-xxx | P1 | bug | ... |
-   | tornado-yyy | P1 | bug | ... |
+   | whirlwind-xxx | P1 | bug | ... |
+   | whirlwind-yyy | P1 | bug | ... |
 
    ### Batch 2 (直列)
    | ID | 優先度 | 種別 | タイトル |
    |----|--------|------|---------|
-   | tornado-zzz | P2 | task | ... |
+   | whirlwind-zzz | P2 | task | ... |
    ```
 
 9. `DRY_RUN=true` の場合:
@@ -310,17 +310,17 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    ### 完了
    | チケット | タイトル | Commit | テスト | イテレーション |
    |----------|---------|--------|--------|--------------|
-   | tornado-xxx | ... | abc1234 | PASS | 1 |
+   | whirlwind-xxx | ... | abc1234 | PASS | 1 |
 
    ### 失敗
    | チケット | タイトル | エラー | イテレーション |
    |----------|---------|--------|--------------|
-   | tornado-yyy | ... | <要約> | 1 |
+   | whirlwind-yyy | ... | <要約> | 1 |
 
    ### 新規起票バグ
    | チケット | タイトル | 優先度 |
    |----------|---------|--------|
-   | tornado-zzz | ... | P1 |
+   | whirlwind-zzz | ... | P1 |
 
    ### テスト結果
    - `just test`: PASS / FAIL

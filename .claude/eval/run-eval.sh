@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Eval harness for tornado project — measures pass@1 for each quality gate
+# Eval harness for whirlwind project — measures pass@1 for each quality gate
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -22,7 +22,7 @@ run_gate() {
   fi
 }
 
-echo "=== tornado eval harness ==="
+echo "=== whirlwind eval harness ==="
 echo "date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
 

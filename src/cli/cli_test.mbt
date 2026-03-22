@@ -61,11 +61,11 @@ test "parse_cli_args supports --config <value>" {
 
 ///|
 test "parse_cli_args --milestones=path" {
-  let args = ["whirlwind", "--milestones=.tornado/milestones.json"]
+  let args = ["whirlwind", "--milestones=.whirlwind/milestones.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
   match parsed {
     Run(milestones_path~, warnings~, ..) => {
-      inspect(milestones_path, content="Some(\".tornado/milestones.json\")")
+      inspect(milestones_path, content="Some(\".whirlwind/milestones.json\")")
       assert_true(warnings.is_empty())
     }
     _ => panic()
