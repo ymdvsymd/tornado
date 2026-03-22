@@ -100,4 +100,61 @@ test("createCodexAdapter passes sandboxMode workspace-write to startThread", asy
   assert.equal(threadOpts.skipGitRepoCheck, undefined);
 });
 
+test("initLogs for new thread contains starting message then thread id", async () => {
+  const fakeThread = {
+    id: "thread-new",
+    async runStreamed() {
+      return { events: emptyAsync() };
+    },
+  };
+
+  class FakeCodex {
+    constructor() {}
+    startThread() {
+      return fakeThread;
+    }
+    resumeThread() {
+      throw new Error("resumeThread should not be called");
+    }
+  }
+
+  const adapter = createCodexAdapter({ CodexClient: FakeCodex });
+  const result = await adapter.start({ prompt: "hello" });
+
+  assert.deepEqual(result.initLogs, [
+    "Starting new thread",
+    "Thread: thread-new",
+  ]);
+});
+
+test("initLogs for resumed thread contains resuming message then thread id", async () => {
+  const fakeThread = {
+    id: "thread-existing",
+    async runStreamed() {
+      return { events: emptyAsync() };
+    },
+  };
+
+  class FakeCodex {
+    constructor() {}
+    startThread() {
+      throw new Error("startThread should not be called");
+    }
+    resumeThread() {
+      return fakeThread;
+    }
+  }
+
+  const adapter = createCodexAdapter({ CodexClient: FakeCodex });
+  const result = await adapter.start({
+    prompt: "continue",
+    threadId: "thread-existing",
+  });
+
+  assert.deepEqual(result.initLogs, [
+    "Resuming thread: thread-existing",
+    "Thread: thread-existing",
+  ]);
+});
+
 async function* emptyAsync() {}

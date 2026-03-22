@@ -73,12 +73,10 @@ export function createCodexAdapter(
         sandboxMode: "workspace-write",
       };
 
-      const logs: string[] = [];
-      const thread = opts.threadId
-        ? resumeThread(client, opts.threadId, threadOpts, logs)
-        : startThread(client, threadOpts, logs);
-
-      logs.push(`Thread: ${thread.id}`);
+      const { thread, log } = opts.threadId
+        ? resumeThread(client, opts.threadId, threadOpts)
+        : startThread(client, threadOpts);
+      const logs: string[] = [log, `Thread: ${thread.id}`];
       const run = await thread.runStreamed(opts.prompt);
 
       return {
@@ -120,19 +118,18 @@ function resumeThread(
   client: CodexClient,
   threadId: string,
   opts: CodexThreadOptions,
-  logs: string[],
-): CodexThread {
-  logs.push(`Resuming thread: ${threadId}`);
-  return client.resumeThread(threadId, opts);
+): { thread: CodexThread; log: string } {
+  return {
+    thread: client.resumeThread(threadId, opts),
+    log: `Resuming thread: ${threadId}`,
+  };
 }
 
 function startThread(
   client: CodexClient,
   opts: CodexThreadOptions,
-  logs: string[],
-): CodexThread {
-  logs.push("Starting new thread");
-  return client.startThread(opts);
+): { thread: CodexThread; log: string } {
+  return { thread: client.startThread(opts), log: "Starting new thread" };
 }
 
 function emitItemStart(

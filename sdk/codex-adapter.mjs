@@ -21,11 +21,10 @@ export function createCodexAdapter(deps = {}) {
         approvalPolicy: "never",
         sandboxMode: "workspace-write",
       };
-      const logs = [];
-      const thread = opts.threadId
-        ? resumeThread(client, opts.threadId, threadOpts, logs)
-        : startThread(client, threadOpts, logs);
-      logs.push(`Thread: ${thread.id}`);
+      const { thread, log } = opts.threadId
+        ? resumeThread(client, opts.threadId, threadOpts)
+        : startThread(client, threadOpts);
+      const logs = [log, `Thread: ${thread.id}`];
       const run = await thread.runStreamed(opts.prompt);
       return {
         sessionId: thread.id,
@@ -61,13 +60,14 @@ export function createCodexAdapter(deps = {}) {
     },
   };
 }
-function resumeThread(client, threadId, opts, logs) {
-  logs.push(`Resuming thread: ${threadId}`);
-  return client.resumeThread(threadId, opts);
+function resumeThread(client, threadId, opts) {
+  return {
+    thread: client.resumeThread(threadId, opts),
+    log: `Resuming thread: ${threadId}`,
+  };
 }
-function startThread(client, opts, logs) {
-  logs.push("Starting new thread");
-  return client.startThread(opts);
+function startThread(client, opts) {
+  return { thread: client.startThread(opts), log: "Starting new thread" };
 }
 function emitItemStart(item) {
   const normalized = normalizeItemStart(item || {});
