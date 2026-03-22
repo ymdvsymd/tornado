@@ -180,7 +180,6 @@ fn milestone_to_json_value(m : @types.Milestone) -> Json {
   for t in m.tasks {
     task_arr.push(ralph_task_to_json_value(t))
   }
-<<<<<<< HEAD
   let obj : Map[String, Json] = {}
   obj["id"] = m.id.to_json()
   obj["goal"] = m.goal.to_json()
@@ -199,7 +198,6 @@ fn ralph_task_to_json_value(t : @types.RalphTask) -> Json {
     Done => "done"
     Failed(_) => "failed"
   }
-<<<<<<< HEAD
   let result_json : Json = match t.result {
     Some(s) => s.to_json()
     None => Json::null()
