@@ -1198,3 +1198,171 @@ test "rework_tasks matches space-delimited feedback (no colon)" {
   assert_true(mgr.milestones[0].tasks[0].result.unwrap().contains("REWORKED"))
   inspect(mgr.milestones[0].tasks[1].result.unwrap(), content="Done v1")
 }
+
+///|
+test "tornado-1fy: detect file conflicts between parallel builders in same wave" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m2", "goal": "Fix prettier config", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m2-t8", "description": "Fix prettier via package.json", "wave": 0, "status": "pending" },
+    #|        { "id": "m2-t9", "description": "Fix prettier via env variable", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  // Both builders report changing package.json — this is the conflict scenario
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Done\nFILES_CHANGED: package.json, src/config.ts",
+  )
+  builder_mock.add_response(
+    "Fix prettier via env variable", "Done\nFILES_CHANGED: package.json, .env",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // The key assertion: file conflict on package.json must be detected and reported
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("file conflict") || msg.contains("File conflict")
+    }),
+  )
+  assert_true(infos.iter().any(fn(msg) { msg.contains("package.json") }))
+}
+
+///|
+test "tornado-1fy: no false positive when parallel builders edit different files" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build features", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Build auth module", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Build logging module", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  // Builders edit different files — no conflict
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Done\nFILES_CHANGED: src/auth.ts",
+  )
+  builder_mock.add_response(
+    "Build logging module", "Done\nFILES_CHANGED: src/logging.ts",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let cb = @types.OrchestratorCallbacks::noop()
+  let callbacks = { ..cb, on_info: fn(msg) { infos.push(msg) } }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // No conflict should be reported
+  assert_true(
+    not(
+      infos
+      .iter()
+      .any(fn(msg) {
+        msg.contains("file conflict") || msg.contains("File conflict")
+      }),
+    ),
+  )
+  // Milestone should complete successfully
+  inspect(mgr.milestones[0].status, content="Done")
+}
+
+///|
+test "tornado-1fy: extract_changed_files parses FILES_CHANGED line correctly" {
+  let result = "Task completed.\nFILES_CHANGED: package.json, src/index.ts, README.md\nDone."
+  let files = @ralph.extract_changed_files(result)
+  assert_true(files.length() == 3)
+  assert_true(files.contains("package.json"))
+  assert_true(files.contains("src/index.ts"))
+  assert_true(files.contains("README.md"))
+}
+
+///|
+test "tornado-1fy: extract_changed_files returns empty for no FILES_CHANGED" {
+  let result = "Task completed successfully."
+  let files = @ralph.extract_changed_files(result)
+  assert_true(files.is_empty())
+}
+
+///|
+test "tornado-1fy: detect_wave_file_conflicts finds overlapping files" {
+  let results : Array[(@types.RalphTask, Array[String])] = []
+  let t1 : @types.RalphTask = {
+    id: "m1-t1",
+    description: "task 1",
+    wave: 0,
+    status: Done,
+    result: None,
+    plan_doc: None,
+  }
+  let t2 : @types.RalphTask = {
+    id: "m1-t2",
+    description: "task 2",
+    wave: 0,
+    status: Done,
+    result: None,
+    plan_doc: None,
+  }
+  results.push((t1, ["package.json", "src/a.ts"]))
+  results.push((t2, ["package.json", "src/b.ts"]))
+  let conflicts = @ralph.detect_wave_file_conflicts(results)
+  assert_true(conflicts.length() == 1)
+  let (file, task_ids) = conflicts[0]
+  inspect(file, content="package.json")
+  assert_true(task_ids.contains("m1-t1"))
+  assert_true(task_ids.contains("m1-t2"))
+}
+
+///|
+test "tornado-1fy: detect_wave_file_conflicts returns empty for no overlaps" {
+  let results : Array[(@types.RalphTask, Array[String])] = []
+  let t1 : @types.RalphTask = {
+    id: "m1-t1",
+    description: "task 1",
+    wave: 0,
+    status: Done,
+    result: None,
+    plan_doc: None,
+  }
+  let t2 : @types.RalphTask = {
+    id: "m1-t2",
+    description: "task 2",
+    wave: 0,
+    status: Done,
+    result: None,
+    plan_doc: None,
+  }
+  results.push((t1, ["src/a.ts"]))
+  results.push((t2, ["src/b.ts"]))
+  let conflicts = @ralph.detect_wave_file_conflicts(results)
+  assert_true(conflicts.is_empty())
+}

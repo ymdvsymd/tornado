@@ -223,6 +223,29 @@ fn RalphLoop::run_wave(
           }
         }
       }
+      // Detect file conflicts between parallel builders in this wave
+      if pending_tasks.length() > 1 {
+        let task_files : Array[(@types.RalphTask, Array[String])] = []
+        for i in 0..<pending_tasks.length() {
+          let task = pending_tasks[i]
+          let result = results[i]
+          let changed = extract_changed_files(result.content)
+          if not(changed.is_empty()) {
+            task_files.push((task, changed))
+          }
+        }
+        let conflicts = detect_wave_file_conflicts(task_files)
+        if not(conflicts.is_empty()) {
+          for conflict in conflicts {
+            let (file, task_ids) = conflict
+            let task_list = join_strings(task_ids, ", ")
+            emit_info(
+              self,
+              "File conflict detected: \{file} was modified by tasks \{task_list}",
+            )
+          }
+        }
+      }
       self.save_milestones() // persist after wave task execution
     }
   }
@@ -555,4 +578,62 @@ fn handle_event(
 ///|
 fn emit_info(rl : RalphLoop, msg : String) -> Unit {
   (rl.callbacks.on_info)(msg)
+}
+
+///| Extract changed file paths from builder output.
+
+///| Looks for a line matching "FILES_CHANGED: file1, file2, ..." and returns
+
+///|
+/// the list of trimmed file names.
+pub fn extract_changed_files(output : String) -> Array[String] {
+  let files : Array[String] = []
+  let prefix = "FILES_CHANGED:"
+  let lines = split_lines(output)
+  for line in lines {
+    let trimmed = trim(line)
+    if trimmed.has_prefix(prefix) {
+      let rest = trim(String::from_array(trimmed.to_array()[prefix.length():]))
+      if not(rest.is_empty()) {
+        for part_view in rest.split(",") {
+          let part = trim(part_view.to_string())
+          if not(part.is_empty()) {
+            files.push(part)
+          }
+        }
+      }
+    }
+  }
+  files
+}
+
+///| Detect file conflicts between parallel tasks in a wave.
+
+///| Takes an array of (task, changed_files) pairs and returns an array of
+
+///|
+/// (file_path, conflicting_task_ids) for files edited by multiple tasks.
+pub fn detect_wave_file_conflicts(
+  task_files : Array[(@types.RalphTask, Array[String])],
+) -> Array[(String, Array[String])] {
+  // Build a map: file_path -> [task_id, ...]
+  let file_owners : Map[String, Array[String]] = {}
+  for pair in task_files {
+    let (task, files) = pair
+    for file in files {
+      match file_owners.get(file) {
+        Some(owners) => owners.push(task.id)
+        None => file_owners[file] = [task.id]
+      }
+    }
+  }
+  // Collect files with more than one owner
+  let conflicts : Array[(String, Array[String])] = []
+  for entry in file_owners {
+    let (file, owners) = entry
+    if owners.length() > 1 {
+      conflicts.push((file, owners))
+    }
+  }
+  conflicts
 }
