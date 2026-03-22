@@ -238,7 +238,7 @@ fn RalphLoop::run_wave(
         if not(conflicts.is_empty()) {
           for conflict in conflicts {
             let (file, task_ids) = conflict
-            let task_list = join_strings(task_ids, ", ")
+            let task_list = @util.join_strings(task_ids, ", ")
             emit_info(
               self,
               "File conflict detected: \{file} was modified by tasks \{task_list}",
@@ -512,7 +512,7 @@ fn generate_milestone_summary(milestone : @types.Milestone) -> String {
   if parts.is_empty() {
     return milestone.goal
   }
-  join_strings(parts, "; ")
+  @util.join_strings(parts, "; ")
 }
 
 ///|
@@ -589,14 +589,16 @@ fn emit_info(rl : RalphLoop, msg : String) -> Unit {
 pub fn extract_changed_files(output : String) -> Array[String] {
   let files : Array[String] = []
   let prefix = "FILES_CHANGED:"
-  let lines = split_lines(output)
+  let lines = @util.split_lines(output)
   for line in lines {
-    let trimmed = trim(line)
+    let trimmed = @util.trim(line)
     if trimmed.has_prefix(prefix) {
-      let rest = trim(String::from_array(trimmed.to_array()[prefix.length():]))
+      let rest = @util.trim(
+        String::from_array(trimmed.to_array()[prefix.length():]),
+      )
       if not(rest.is_empty()) {
         for part_view in rest.split(",") {
-          let part = trim(part_view.to_string())
+          let part = @util.trim(part_view.to_string())
           if not(part.is_empty()) {
             files.push(part)
           }
