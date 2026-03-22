@@ -9,8 +9,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Install MoonBit
@@ -21,6 +21,14 @@ jobs:
       - run: npm ci
       - run: moon fmt --check
       - run: moon check --target js
+      - name: Build CLI
+        run: |
+          moon build --target js src/cmd/app
+          mkdir -p bin
+          printf '\x23\x21/usr/bin/env node\n' > bin/whirlwind.js
+          cat _build/js/debug/build/cmd/app/app.js >> bin/whirlwind.js
+          sed -i "s/__VERSION__/$(node -p "require('./package.json').version")/" bin/whirlwind.js
+          chmod +x bin/whirlwind.js
       - run: npm run build:sdk
       - run: npx prettier --check 'sdk/**/*.{mts,mjs}'
       - run: node --test sdk/*.test.mjs
