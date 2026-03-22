@@ -2,8 +2,6 @@
 test "ProjectConfig::from_json_string parses basic config" {
   let json =
     #|{
-    #|  "project_dir": "/tmp/project",
-    #|  "review_dir": "reviews",
     #|  "max_review_cycles": 5,
     #|  "agents": [
     #|    { "id": "dev-1", "kind": "claude-code", "role": "dev" },
@@ -11,8 +9,6 @@ test "ProjectConfig::from_json_string parses basic config" {
     #|  ]
     #|}
   let config = @config.ProjectConfig::from_json_string(json)
-  inspect(config.project_dir, content="/tmp/project")
-  inspect(config.review_dir, content="reviews")
   inspect(config.max_review_cycles, content="5")
   assert_true(config.agents.length() == 2)
   inspect(config.agents[0].id, content="dev-1")
@@ -29,8 +25,6 @@ test "ProjectConfig::from_json_string with defaults" {
   let json =
     #|{ "agents": [] }
   let config = @config.ProjectConfig::from_json_string(json)
-  inspect(config.project_dir, content=".")
-  inspect(config.review_dir, content="docs/reviews")
   inspect(config.max_review_cycles, content="3")
   inspect(config.review_interval, content="1")
 }
@@ -38,7 +32,6 @@ test "ProjectConfig::from_json_string with defaults" {
 ///|
 test "ProjectConfig::default" {
   let config = @config.ProjectConfig::default()
-  inspect(config.project_dir, content=".")
   assert_true(config.agents.is_empty())
 }
 

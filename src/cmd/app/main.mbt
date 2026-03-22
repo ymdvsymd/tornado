@@ -290,8 +290,6 @@ fn run_validate(config_path : String) -> Unit {
   let errors = config.validate()
   if errors.is_empty() {
     println("Config is valid.")
-    println("  project_dir: \{config.project_dir}")
-    println("  review_dir: \{config.review_dir}")
     println("  max_review_cycles: \{config.max_review_cycles}")
     println("  review_interval: \{config.review_interval}")
     println("  agents: \{config.agents.length()}")

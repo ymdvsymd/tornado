@@ -28,8 +28,6 @@ fn make_ralph_config(ralph_enabled? : Bool = true) -> @config.ProjectConfig {
     max_iterations: 10,
   }
   {
-    project_dir: ".",
-    review_dir: "docs/reviews",
     max_review_cycles: 3,
     review_interval: 1,
     agents: [planner_agent, builder_agent, verifier_agent],
@@ -577,8 +575,6 @@ test "RalphLoop without verifier auto-approves" {
     max_iterations: 10,
   }
   let config : @config.ProjectConfig = {
-    project_dir: ".",
-    review_dir: "docs/reviews",
     max_review_cycles: 3,
     review_interval: 1,
     agents: [planner_agent, builder_agent],
@@ -1558,8 +1554,6 @@ test "verify_milestone reaches max rework attempts and accepts as-is" {
     max_iterations: 10,
   }
   let config : @config.ProjectConfig = {
-    project_dir: ".",
-    review_dir: "docs/reviews",
     max_review_cycles: 3,
     review_interval: 1,
     agents: [planner_agent, builder_agent, verifier_agent],
@@ -1700,8 +1694,6 @@ test "run_wave returns false when no builder backend is available" {
     max_iterations: 10,
   }
   let config : @config.ProjectConfig = {
-    project_dir: ".",
-    review_dir: "docs/reviews",
     max_review_cycles: 3,
     review_interval: 1,
     agents: [planner_agent, verifier_agent],

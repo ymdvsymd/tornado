@@ -1,8 +1,6 @@
 ///|
 /// Project configuration
 pub(all) struct ProjectConfig {
-  project_dir : String
-  review_dir : String
   max_review_cycles : Int
   review_interval : Int
   agents : Array[@types.AgentConfig]
@@ -88,8 +86,6 @@ pub fn ProjectConfig::from_json_string(
 pub fn ProjectConfig::from_json(json : Json) -> ProjectConfig raise Failure {
   match json {
     Object(map) => {
-      let project_dir = @util.get_string(json, "project_dir", ".")
-      let review_dir = @util.get_string(json, "review_dir", "docs/reviews")
       let max_review_cycles = @util.get_int(json, "max_review_cycles", 3)
       let review_interval = @util.get_int(json, "review_interval", 1)
       let agents : Array[@types.AgentConfig] = []
@@ -105,8 +101,6 @@ pub fn ProjectConfig::from_json(json : Json) -> ProjectConfig raise Failure {
       let milestones_path = @util.get_string_opt(json, "milestones_path")
       let max_rework_attempts = @util.get_int(json, "max_rework_attempts", 3)
       {
-        project_dir,
-        review_dir,
         max_review_cycles,
         review_interval,
         agents,
@@ -124,8 +118,6 @@ pub fn ProjectConfig::from_json(json : Json) -> ProjectConfig raise Failure {
 /// Create a default config (empty agents)
 pub fn ProjectConfig::default() -> ProjectConfig {
   {
-    project_dir: ".",
-    review_dir: "docs/reviews",
     max_review_cycles: 3,
     review_interval: 1,
     agents: [],
@@ -158,8 +150,6 @@ pub fn ProjectConfig::preset_default() -> ProjectConfig {
     max_iterations: 5,
   }
   {
-    project_dir: ".",
-    review_dir: "docs/reviews",
     max_review_cycles: 2,
     review_interval: 1,
     agents: [dev, reviewer],
@@ -201,8 +191,6 @@ pub fn ProjectConfig::preset_ralph() -> ProjectConfig {
     max_iterations: 5,
   }
   {
-    project_dir: ".",
-    review_dir: "docs/reviews",
     max_review_cycles: 3,
     review_interval: 1,
     agents: [planner, builder, verifier],

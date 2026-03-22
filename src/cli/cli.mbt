@@ -92,8 +92,6 @@ pub fn apply_overrides(
     None => config.review_interval
   }
   {
-    project_dir: config.project_dir,
-    review_dir: config.review_dir,
     max_review_cycles: config.max_review_cycles,
     review_interval: ri,
     agents,
