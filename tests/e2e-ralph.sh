@@ -81,34 +81,25 @@ fi
 
 cat >"$TMP_DIR/whirlwind.json" <<EOF
 {
-  "project_dir": ".",
-  "review_dir": "docs/reviews",
   "max_review_cycles": 3,
   "review_interval": 1,
-  "ralph_enabled": true,
   "milestones_path": "milestones.json",
   "max_rework_attempts": 2,
   "agents": [
     {
       "id": "planner",
       "kind": "$PLANNER_KIND",
-      "role": "planner",
-      "working_dir": ".",
-      "max_iterations": 10
+      "role": "planner"
     },
     {
       "id": "builder",
       "kind": "$BUILDER_KIND",
-      "role": "builder",
-      "working_dir": ".",
-      "max_iterations": 10
+      "role": "builder"
     },
     {
       "id": "verifier",
       "kind": "$VERIFIER_KIND",
-      "role": "verifier",
-      "working_dir": ".",
-      "max_iterations": 5
+      "role": "verifier"
     }
   ]
 }
@@ -141,9 +132,9 @@ cd "$TMP_DIR"
 # (prevents "nested session" error when running inside a Claude Code session)
 unset CLAUDECODE
 if [ "$MODE" = "mock" ]; then
-  OUTPUT="$(node "$ROOT_DIR/bin/whirlwind.js" --ralph --config=whirlwind.json --log="$LOG_FILE" 2>&1)"
+  OUTPUT="$(node "$ROOT_DIR/bin/whirlwind.js" --config=whirlwind.json --log="$LOG_FILE" 2>&1)"
 else
-  OUTPUT="$(node "$ROOT_DIR/bin/whirlwind.js" --ralph --config=whirlwind.json --log="$LOG_FILE" 2>&1)"
+  OUTPUT="$(node "$ROOT_DIR/bin/whirlwind.js" --config=whirlwind.json --log="$LOG_FILE" 2>&1)"
 fi
 
 printf '%s\n' "$OUTPUT"
