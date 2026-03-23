@@ -61,19 +61,7 @@ function formatSettledResult(result: PromiseSettledResult<string>): string {
     return result.value;
   }
 
-  const msg = getErrorMessage(result.reason);
-  if (isCrashError(msg)) {
-    return `CRASH: ${msg}`;
-  }
-  return `ERROR: ${msg}`;
-}
-
-function isCrashError(msg: string): boolean {
-  return (
-    msg.includes("SCDynamicStore") ||
-    msg.includes("panicked") ||
-    msg.includes("exit code 101")
-  );
+  return `ERROR: ${getErrorMessage(result.reason)}`;
 }
 
 function getErrorMessage(error: unknown): string {
