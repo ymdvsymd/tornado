@@ -9,6 +9,7 @@ pub struct RalphLoop {
   callbacks : @types.OrchestratorCallbacks
   mut current_phase : @types.RalphPhase
   max_rework_attempts : Int
+  file_checker : (String) -> Bool
 }
 
 ///|
@@ -19,6 +20,7 @@ pub fn RalphLoop::new(
   backends : Map[String, @agent.BoxedBackend],
   callbacks : @types.OrchestratorCallbacks,
   lang? : String = "en",
+  file_checker? : (String) -> Bool = path_exists,
 ) -> RalphLoop {
   let planner_id = find_agent_id(config, @types.AgentRole::Planner)
   let verifier_id = find_agent_id(config, @types.AgentRole::Verifier)
@@ -39,6 +41,7 @@ pub fn RalphLoop::new(
     callbacks,
     current_phase: @types.RalphPhase::LoadingMilestones,
     max_rework_attempts: config.max_rework_attempts,
+    file_checker,
   }
 }
 
@@ -203,9 +206,14 @@ fn RalphLoop::run_wave(
         emit_info(self, "Running task \{task.id}: \{task.description}")
         builder_tasks.push((task.description, builder_system_prompt))
       }
-      let results = @agent.run_parallel(backend, builder_tasks, fn(e) {
-        handle_event(self, bid, e)
-      })
+      let results = run_builder_tasks_serially(
+        self,
+        backend,
+        bid,
+        pending_tasks,
+        builder_tasks,
+        "wave \{wave} of \{milestone.id}",
+      )
       for i in 0..<pending_tasks.length() {
         let task = pending_tasks[i]
         let result = results[i]
@@ -222,6 +230,14 @@ fn RalphLoop::run_wave(
             emit_info(self, "Task \{task.id} failed: \{err}")
           }
         }
+      }
+      if pending_tasks.iter().any(fn(task) { task.status is Failed(_) }) {
+        emit_info(
+          self,
+          "Wave \{wave} failed because one or more builder tasks failed",
+        )
+        self.save_milestones()
+        return false
       }
       // Detect file conflicts between parallel builders in this wave
       if pending_tasks.length() > 1 {
@@ -291,10 +307,16 @@ fn RalphLoop::verify_milestone(
             }
             NeedsRework(items) => {
               if attempt >= self.max_rework_attempts {
+                let reason =
+                  "Max rework attempts reached with unresolved issues: " +
+                  @util.join_strings(items, " | ")
                 emit_info(
-                  self, "Max rework attempts reached for milestone verification, accepting as-is",
+                  self,
+                  "Max rework attempts reached for milestone verification; failing milestone: \{reason}",
                 )
-                return true
+                milestone.status = Failed(reason)
+                self.save_milestones()
+                return false
               }
               self.current_phase = Reworking(milestone.id, verification_wave)
               emit_info(
@@ -423,9 +445,14 @@ fn RalphLoop::rework_task_list(
           _ => ()
         }
       }
-      let results = @agent.run_parallel(backend, builder_tasks, fn(e) {
-        handle_event(self, bid, e)
-      })
+      let results = run_builder_tasks_serially(
+        self,
+        backend,
+        bid,
+        rework_tasks,
+        builder_tasks,
+        "task rework",
+      )
       for i in 0..<rework_tasks.length() {
         let task = rework_tasks[i]
         let result = results[i]
@@ -579,6 +606,93 @@ fn handle_event(
 fn emit_info(rl : RalphLoop, msg : String) -> Unit {
   rl.callbacks.emit(Info({ message: msg }))
 }
+
+///|
+fn run_builder_tasks_serially(
+  rl : RalphLoop,
+  backend : @agent.BoxedBackend,
+  builder_id : String,
+  tasks : Array[@types.RalphTask],
+  prompts : Array[(String, String)],
+  context : String,
+) -> Array[@types.AgentResult] {
+  let results : Array[@types.AgentResult] = []
+  if prompts.length() > 1 {
+    emit_info(
+      rl,
+      "Serializing \{prompts.length()} builder tasks for \{context} to avoid shared-worktree overwrites",
+    )
+  }
+  for i in 0..<prompts.length() {
+    let (prompt, system_prompt) = prompts[i]
+    let result = backend.run(prompt, system_prompt, fn(e) {
+      handle_event(rl, builder_id, e)
+    })
+    results.push(validate_builder_result(rl, tasks[i], result))
+  }
+  results
+}
+
+///|
+fn validate_builder_result(
+  rl : RalphLoop,
+  task : @types.RalphTask,
+  result : @types.AgentResult,
+) -> @types.AgentResult {
+  match result.status {
+    Completed => {
+      let changed_files = extract_changed_files(result.content)
+      if changed_files.is_empty() {
+        return result
+      }
+      let missing_files = find_missing_paths(changed_files, rl.file_checker)
+      if missing_files.is_empty() {
+        return result
+      }
+      let err =
+        "post-run file verification failed for \{task.id}; missing files: " +
+        @util.join_strings(missing_files, ", ")
+      emit_info(rl, err)
+      {
+        content: result.content,
+        status: Failed(err),
+        error: Some(err),
+        session_id: result.session_id,
+      }
+    }
+    _ => result
+  }
+}
+
+///|
+fn find_missing_paths(
+  paths : Array[String],
+  checker : (String) -> Bool,
+) -> Array[String] {
+  let missing : Array[String] = []
+  for path in paths {
+    if not(checker(path)) {
+      missing.push(path)
+    }
+  }
+  missing
+}
+
+///|
+fn path_exists(path : String) -> Bool {
+  js_path_exists(path) == "true"
+}
+
+///|
+extern "js" fn js_path_exists(path : String) -> String =
+  #|(path) => {
+  #|  try {
+  #|    const fs = require('fs');
+  #|    return fs.existsSync(path) ? 'true' : 'false';
+  #|  } catch (_err) {
+  #|    return 'false';
+  #|  }
+  #|}
 
 ///| Extract changed file paths from builder output.
 

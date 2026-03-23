@@ -446,6 +446,24 @@ test "parse_planner_output ignores --- before tasks" {
 }
 
 ///|
+test "parse_planner_output ignores context bullets before first WAVE header" {
+  let mgr = @ralph.MilestoneManager::new()
+  let output =
+    #|**Key context from exploration:**
+    #|- libs/example.py already exists
+    #|- config/app.yml is missing
+    #|---
+    #|WAVE 0:
+    #|1. Create config/app.yml
+    #|2. Wire the loader
+  let tasks = mgr.parse_planner_output(output, "m1")
+  assert_true(tasks.length() == 2)
+  inspect(tasks[0].wave, content="0")
+  inspect(tasks[0].description, content="Create config/app.yml")
+  inspect(tasks[1].description, content="Wire the loader")
+}
+
+///|
 test "parse_planner_output handles ## WAVE headers" {
   let mgr = @ralph.MilestoneManager::new()
   let output =

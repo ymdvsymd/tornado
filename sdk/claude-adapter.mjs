@@ -10,12 +10,18 @@ export function createClaudeAdapter() {
     tag: "Claude",
     async start(opts) {
       const queryOpts = buildQueryOptions(opts);
+      debugClaude(
+        `start: cwd=${String(queryOpts.cwd || process.cwd())} model=${opts.model || "default"} resume=${opts.sessionId || "new"}`,
+      );
+      debugClaude("start: calling claude-agent-sdk query()");
+      const stream = query({
+        prompt: opts.prompt,
+        options: queryOpts,
+      });
+      debugClaude("start: query() returned stream");
       return {
         sessionId: opts.sessionId || "",
-        stream: query({
-          prompt: opts.prompt,
-          options: queryOpts,
-        }),
+        stream: withClaudeDebugStream(stream),
       };
     },
     emit(raw) {
@@ -27,6 +33,31 @@ export function createClaudeAdapter() {
       return emissions;
     },
   };
+}
+const claudeDebugEnabled = process.env.WHIRLWIND_DEBUG_CLAUDE === "1";
+function withClaudeDebugStream(stream) {
+  if (!claudeDebugEnabled) return stream;
+  return {
+    async *[Symbol.asyncIterator]() {
+      let index = 0;
+      debugClaude("stream: awaiting first event");
+      for await (const item of stream) {
+        index += 1;
+        const summary =
+          typeof item?.type === "string"
+            ? item.type +
+              (typeof item?.subtype === "string" ? `/${item.subtype}` : "")
+            : "unknown";
+        debugClaude(`stream: received event #${index} (${summary})`);
+        yield item;
+      }
+      debugClaude(`stream: completed after ${index} events`);
+    },
+  };
+}
+function debugClaude(message) {
+  if (!claudeDebugEnabled) return;
+  process.stderr.write(`[ClaudeAdapterDebug] ${message}\n`);
 }
 function buildQueryOptions(opts) {
   const queryOptions = {

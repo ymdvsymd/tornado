@@ -62,6 +62,7 @@ fi
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 LOG_FILE="$TMP_DIR/whirlwind.log"
+OUTPUT_FILE="$TMP_DIR/whirlwind.stdout.log"
 
 # Initialize git repo in temp dir (required by Codex SDK for file operations)
 git init -q "$TMP_DIR"
@@ -134,14 +135,25 @@ cd "$TMP_DIR"
 # Unset CLAUDECODE to allow Claude Agent SDK to spawn Claude Code subprocesses
 # (prevents "nested session" error when running inside a Claude Code session)
 unset CLAUDECODE
+set +e
 case "$MODE" in
   mock|live)
-    OUTPUT="$(node "$ROOT_DIR/bin/whirlwind.js" --config=whirlwind.json --log="$LOG_FILE" 2>&1)"
+    node "$ROOT_DIR/bin/whirlwind.js" --config=whirlwind.json --log="$LOG_FILE" 2>&1 | tee "$OUTPUT_FILE"
+    CMD_STATUS=${PIPESTATUS[0]}
     ;;
   mock-flags|live-flags)
-    OUTPUT="$(node "$ROOT_DIR/bin/whirlwind.js" --planner="$PLANNER_KIND" --builder="$BUILDER_KIND" --verifier="$VERIFIER_KIND" --milestones=milestones.json --log="$LOG_FILE" 2>&1)"
+    node "$ROOT_DIR/bin/whirlwind.js" --planner="$PLANNER_KIND" --builder="$BUILDER_KIND" --verifier="$VERIFIER_KIND" --milestones=milestones.json --log="$LOG_FILE" 2>&1 | tee "$OUTPUT_FILE"
+    CMD_STATUS=${PIPESTATUS[0]}
     ;;
 esac
+set -e
+
+OUTPUT="$(cat "$OUTPUT_FILE")"
+
+if [ "$CMD_STATUS" -ne 0 ]; then
+  echo "FAIL: whirlwind exited with code $CMD_STATUS" >&2
+  exit "$CMD_STATUS"
+fi
 
 printf '%s\n' "$OUTPUT"
 

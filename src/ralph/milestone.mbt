@@ -243,14 +243,16 @@ fn parse_plan_text(
 ) -> Array[@types.RalphTask] {
   let tasks : Array[@types.RalphTask] = []
   let mut current_wave = 0
+  let mut saw_wave_header = false
+  let mut found_wave_tasks = false
   let lines = @util.split_lines(output)
   for line in lines {
     let trimmed = @util.trim(line)
     if trimmed.is_empty() {
       continue
     }
-    // Stop at "---" separator only after we've found tasks
-    if is_separator(trimmed) && tasks.length() > 0 {
+    // Stop at "---" only after we've started parsing actual WAVE tasks.
+    if is_separator(trimmed) && found_wave_tasks {
       break
     }
     // Strip markdown formatting before checking wave prefix
@@ -260,12 +262,17 @@ fn parse_plan_text(
       let num = parse_wave_number(stripped)
       if num >= 0 {
         current_wave = num
+        saw_wave_header = true
       }
+      continue
+    }
+    if not(saw_wave_header) {
       continue
     }
     // Check for numbered items: "1. description" or "- description"
     let desc = parse_list_item(trimmed)
     if desc.length() > 0 {
+      found_wave_tasks = true
       let id = mgr.gen_task_id(milestone_id)
       tasks.push({
         id,

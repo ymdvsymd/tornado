@@ -1292,7 +1292,9 @@ test "tornado-1fy: detect file conflicts between parallel builders in same wave"
     },
     on_save: fn() {  },
   }
-  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  let rl = @ralph.RalphLoop::new(
+    config, mgr, backends, callbacks, file_checker=fn(_) { true },
+  )
   rl.run()
   // The key assertion: file conflict on package.json must be detected and reported
   assert_true(
@@ -1346,7 +1348,9 @@ test "tornado-1fy: no false positive when parallel builders edit different files
     },
     on_save: fn() {  },
   }
-  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  let rl = @ralph.RalphLoop::new(
+    config, mgr, backends, callbacks, file_checker=fn(_) { true },
+  )
   rl.run()
   // No conflict should be reported
   assert_true(
@@ -1447,7 +1451,7 @@ test "run_wave with 3 parallel builders causing multi-file conflicts" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
-  // All three builders touch config.ts; t1 and t3 also both touch schema.ts
+  // All three builders touch config.ts; t1 and t3 also both touch parser.ts
   let builder_mock = @agent.MockBackend::new(
     default_response="Done\nFILES_CHANGED: src/config.ts, src/parser.ts",
   )
@@ -1474,19 +1478,25 @@ test "run_wave with 3 parallel builders causing multi-file conflicts" {
     },
     on_save: fn() {  },
   }
-  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  let rl = @ralph.RalphLoop::new(
+    config, mgr, backends, callbacks, file_checker=fn(_) { true },
+  )
   rl.run()
   // config.ts is touched by all 3 tasks — must report conflict with 3 task IDs
   assert_true(
     infos
     .iter()
-    .any(fn(msg) { msg.contains("File conflict") && msg.contains("config.ts") }),
+    .any(fn(msg) {
+      msg.contains("File conflict") && msg.contains("src/config.ts")
+    }),
   )
   // parser.ts is touched by t1 and t3 — must also report conflict
   assert_true(
     infos
     .iter()
-    .any(fn(msg) { msg.contains("File conflict") && msg.contains("parser.ts") }),
+    .any(fn(msg) {
+      msg.contains("File conflict") && msg.contains("src/parser.ts")
+    }),
   )
   // validator.ts is touched only by t2 — no conflict reported for it
   assert_true(
@@ -1494,7 +1504,7 @@ test "run_wave with 3 parallel builders causing multi-file conflicts" {
       infos
       .iter()
       .any(fn(msg) {
-        msg.contains("File conflict") && msg.contains("validator.ts")
+        msg.contains("File conflict") && msg.contains("src/validator.ts")
       }),
     ),
   )
@@ -1503,7 +1513,7 @@ test "run_wave with 3 parallel builders causing multi-file conflicts" {
 }
 
 ///|
-test "verify_milestone reaches max rework attempts and accepts as-is" {
+test "verify_milestone fails when max rework attempts are exhausted" {
   // Use max_rework_attempts=2 to test the exact boundary
   let planner_agent : @types.AgentConfig = {
     id: "planner",
@@ -1563,12 +1573,11 @@ test "verify_milestone reaches max rework attempts and accepts as-is" {
   }
   let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
   rl.run()
-  // Max rework should be reached and milestone accepted as-is
+  // Max rework should be reached and milestone should fail.
   assert_true(
     infos.iter().any(fn(msg) { msg.contains("Max rework attempts reached") }),
   )
-  // Milestone should be Done (accepted as-is), not Failed
-  inspect(mgr.milestones[0].status, content="Done")
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
   // Should see 3 verification attempts (attempt 0, 1, 2) where attempt 2 >= max_rework_attempts=2
   assert_true(
     infos
@@ -1584,6 +1593,123 @@ test "verify_milestone reaches max rework attempts and accepts as-is" {
     infos
     .iter()
     .any(fn(msg) { msg.contains("Verifying milestone m1 (attempt 3)") }),
+  )
+}
+
+///|
+test "run_wave fails builder result when reported files are missing from worktree" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Create config", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Create config file", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Done\nFILES_CHANGED: does-not-exist.txt",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(
+    config, mgr, backends, callbacks, file_checker=fn(_) { false },
+  )
+  rl.run()
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("post-run file verification failed") }),
+  )
+}
+
+///|
+test "validate_builder_result fails on partial file missing (whirlwind-aps)" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Create config", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Create config and scripts", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  // Builder reports creating two files, but config/snowflake.yml doesn't persist
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Done\nFILES_CHANGED: scripts/query.py, config/snowflake.yml",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  // Only scripts/query.py exists; config/snowflake.yml is missing
+  let rl = @ralph.RalphLoop::new(
+    config,
+    mgr,
+    backends,
+    callbacks,
+    file_checker=fn(path) { path == "scripts/query.py" },
+  )
+  rl.run()
+  // Strict check: task should fail because config/snowflake.yml is missing
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("post-run file verification failed") &&
+      msg.contains("config/snowflake.yml")
+    }),
+  )
+  // scripts/query.py should NOT appear in missing files
+  assert_true(
+    not(
+      infos
+      .iter()
+      .any(fn(msg) {
+        msg.contains("post-run file verification failed") &&
+        msg.contains("scripts/query.py")
+      }),
+    ),
   )
 }
 
@@ -1854,7 +1980,9 @@ test "single task wave does not trigger conflict detection" {
     },
     on_save: fn() {  },
   }
-  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  let rl = @ralph.RalphLoop::new(
+    config, mgr, backends, callbacks, file_checker=fn(_) { true },
+  )
   rl.run()
   // With only 1 task, the conflict detection block is skipped entirely
   assert_true(
