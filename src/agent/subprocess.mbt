@@ -137,16 +137,24 @@ pub fn parse_sdk_result_event(
         _ => ()
       }
   }
-  match map.get("duration_ms") {
+  let duration_ms : Double = match map.get("duration_ms") {
     Some(Number(n, ..)) => {
       let secs = n / 1000.0
       buf.write_string(", duration=\{secs}s")
+      n
     }
-    _ => ()
+    _ => 0.0
   }
   match map.get("duration_api_ms") {
     Some(Number(n, ..)) => {
-      let secs = n / 1000.0
+      // Cap api_total at duration: duration_api_ms is a cumulative sum across
+      // parallel tool calls and can exceed wall-clock duration_ms.
+      let capped = if duration_ms > 0.0 && n > duration_ms {
+        duration_ms
+      } else {
+        n
+      }
+      let secs = capped / 1000.0
       buf.write_string(", api_total=\{secs}s")
     }
     _ => ()

@@ -621,6 +621,44 @@ test "parse_sdk_result_event labels api time as cumulative (tornado-a2v)" {
   assert_true(info.contains("api_total="))
 }
 
+///|
+test "whirlwind-dd4: api_total capped at duration when parallel calls inflate it" {
+  // Regression: duration_api_ms is a cumulative sum across parallel tool calls,
+  // so it can exceed duration_ms (wall-clock). The displayed api_total must be
+  // capped at duration to avoid reporting impossible metrics.
+  let ec = EventCollector::new()
+  let s =
+    #|{
+    #|  "type": "result",
+    #|  "subtype": "success",
+    #|  "duration_ms": 118491,
+    #|  "duration_api_ms": 200134
+    #|}
+  let map = json_map(s)
+  @agent.parse_sdk_result_event(map, ec.handler())
+  let info = ec.infos[0]
+  // api_total must equal duration (118.491s), NOT 200.134s
+  assert_true(info.contains("api_total=118.491s"))
+  assert_true(not(info.contains("api_total=200.134s")))
+}
+
+///|
+test "whirlwind-dd4: api_total unchanged when within duration" {
+  // When api_total does not exceed duration, it should be reported as-is.
+  let ec = EventCollector::new()
+  let s =
+    #|{
+    #|  "type": "result",
+    #|  "subtype": "success",
+    #|  "duration_ms": 12500,
+    #|  "duration_api_ms": 8200
+    #|}
+  let map = json_map(s)
+  @agent.parse_sdk_result_event(map, ec.handler())
+  let info = ec.infos[0]
+  assert_true(info.contains("api_total=8.2s"))
+}
+
 // ── Codex stream_event text accumulation ──
 
 ///|
