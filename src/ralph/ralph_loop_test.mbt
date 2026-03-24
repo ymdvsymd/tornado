@@ -2416,3 +2416,43 @@ test "single task wave does not trigger conflict detection" {
   )
   inspect(mgr.milestones[0].status, content="Done")
 }
+
+///|
+test "whirlwind-khq: resume retries failed milestones instead of skipping them" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Build auth", "status": "failed", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
+  let planner_mock = @agent.MockBackend::new(
+    default_response="WAVE 0:\n1. Create schema\nSCOPE: src/schema.mbt",
+  )
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Task completed successfully",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  inspect(mgr.milestones[0].status, content="Done")
+  assert_true(infos.iter().any(fn(m) { m.contains("Planning") }))
+}

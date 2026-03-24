@@ -57,6 +57,21 @@ pub fn RalphLoop::run(self : RalphLoop) -> Unit {
     self.run_dry_run()
     return
   }
+  // Reset failed milestones to pending so resume retries them
+  for m in self.milestone_manager.milestones {
+    match m.status {
+      Failed(_) => {
+        emit_info(
+          self,
+          "Resetting failed milestone \{m.id} to pending for retry",
+        )
+        m.tasks = []
+        m.status = Pending
+      }
+      _ => ()
+    }
+  }
+  self.save_milestones()
   while true {
     // Get next pending milestone
     let milestone = self.milestone_manager.next_pending_milestone()
