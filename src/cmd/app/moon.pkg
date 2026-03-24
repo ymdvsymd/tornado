@@ -4,6 +4,7 @@ import {
   "ymdvsymd/whirlwind/cli",
   "ymdvsymd/whirlwind/agent",
   "ymdvsymd/whirlwind/ralph",
+  "ymdvsymd/whirlwind/plan",
   "ymdvsymd/whirlwind/cmd/helpers",
   "moonbitlang/x/sys",
   "moonbitlang/core/json",

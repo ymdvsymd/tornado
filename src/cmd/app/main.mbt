@@ -29,8 +29,10 @@ fn main {
       builder_model~,
       verifier_model~,
       milestones_path=cli_milestones,
-      log_path~,
+      plan_path~,
+      dry_run~,
       lang=cli_lang,
+      log_path~,
       warnings~
     ) => {
       for w in warnings {
@@ -43,7 +45,7 @@ fn main {
       }
       run_ralph(
         config_path, lang, planner_kind, builder_kind, verifier_kind, planner_model,
-        builder_model, verifier_model, cli_milestones,
+        builder_model, verifier_model, cli_milestones, plan_path, dry_run,
       )
     }
     @cli.CliCommand::Validate(path) =>
@@ -84,6 +86,8 @@ fn print_usage() -> Unit {
     "  --verifier-model=<model> Verifier model (default: sonnet for claude-code)",
   )
   println("  --milestones=<path>     Milestones file path")
+  println("  --plan=<path>           Plan markdown file path")
+  println("  --dry-run               Stop after planning/task splitting")
   println(
     "  --lang=auto|ja|en       Review language (default: auto, detected from LANG env)",
   )
@@ -107,6 +111,8 @@ fn run_ralph(
   builder_model : String?,
   verifier_model : String?,
   cli_milestones : String?,
+  plan_path : String?,
+  dry_run : Bool,
 ) -> Unit {
   log("INFO", "Starting ralph loop mode...")
   // Load or create config
@@ -156,31 +162,15 @@ fn run_ralph(
   // Create backends
   let backends = @agent.create_backends(config.agents)
   // Load or create milestones
-  let milestones_path = match config.milestones_path {
-    Some(p) => p
-    None => ".whirlwind/milestones.json"
-  }
-  let mgr = if is_existing_file(milestones_path) {
-    match read_file_result(milestones_path) {
-      Err(_) => {
-        log("WARN", "Could not read milestones file, starting fresh")
-        @ralph.MilestoneManager::new()
-      }
-      Ok(content) =>
-        @ralph.MilestoneManager::load_from_json(content) catch {
-          err => {
-            log(
-              "WARN",
-              "Could not parse milestones file: \{err}, starting fresh",
-            )
-            @ralph.MilestoneManager::new()
-          }
-        }
-    }
-  } else {
-    log("INFO", "No milestones file found at \{milestones_path}")
-    log("INFO", "Create \{milestones_path} with milestone definitions to start")
-    @ralph.MilestoneManager::new()
+  let (milestones_path, mgr) = match plan_path {
+    Some(path) =>
+      load_milestones_from_plan(
+        path,
+        config,
+        backends,
+        allow_llm_classification=planner_kind is Some(_),
+      )
+    None => load_milestones_from_file(config)
   }
   if mgr.milestones.is_empty() {
     log("WARN", "No milestones defined. Create \{milestones_path} first.")
@@ -211,7 +201,14 @@ fn run_ralph(
     on_save: fn() { write_file_sync(milestones_path, mgr.to_json()) },
   }
   // Run ralph loop
-  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks, lang~)
+  let rl = @ralph.RalphLoop::new(
+    config,
+    mgr,
+    backends,
+    callbacks,
+    dry_run~,
+    lang~,
+  )
   rl.run()
   // Save milestones
   let json = mgr.to_json()
@@ -222,6 +219,188 @@ fn run_ralph(
 ///|
 fn read_file_result(path : String) -> Result[String, String] {
   @agent.check_ffi_error(read_file_sync(path))
+}
+
+///|
+fn load_milestones_from_file(
+  config : @config.ProjectConfig,
+) -> (String, @ralph.MilestoneManager) {
+  let milestones_path = match config.milestones_path {
+    Some(p) => p
+    None => ".whirlwind/milestones.json"
+  }
+  let mgr = if is_existing_file(milestones_path) {
+    match read_file_result(milestones_path) {
+      Err(_) => {
+        log("WARN", "Could not read milestones file, starting fresh")
+        @ralph.MilestoneManager::new()
+      }
+      Ok(content) =>
+        @ralph.MilestoneManager::load_from_json(content) catch {
+          err => {
+            log(
+              "WARN",
+              "Could not parse milestones file: \{err}, starting fresh",
+            )
+            @ralph.MilestoneManager::new()
+          }
+        }
+    }
+  } else {
+    log("INFO", "No milestones file found at \{milestones_path}")
+    log("INFO", "Create \{milestones_path} with milestone definitions to start")
+    @ralph.MilestoneManager::new()
+  }
+  (milestones_path, mgr)
+}
+
+///|
+fn load_milestones_from_plan(
+  path : String,
+  config : @config.ProjectConfig,
+  backends : Map[String, @agent.BoxedBackend],
+  allow_llm_classification? : Bool = false,
+) -> (String, @ralph.MilestoneManager) {
+  let content = match read_file_result(path) {
+    Err(err) => {
+      log("ERROR", "Failed to read plan: \{err}")
+      return (".whirlwind/milestones.json", @ralph.MilestoneManager::new())
+    }
+    Ok(content) => content
+  }
+  let doc = @plan.parse_plan(content)
+  let mgr = classify_plan_document(
+    doc, config, backends, allow_llm_classification,
+  )
+  if mgr.milestones.is_empty() {
+    log("ERROR", "Plan conversion produced zero milestones")
+    return (".whirlwind/milestones.json", mgr)
+  }
+  let timestamp = now_run_timestamp()
+  let run_dir = @plan.generate_run_dir_name(doc.title, timestamp)
+  mkdir_p_sync(run_dir)
+  let milestones_path = run_dir + "/milestones.json"
+  write_file_sync(milestones_path, mgr.to_json())
+  log(
+    "INFO",
+    "Plan summary: \{mgr.milestones.length()} milestones, brief length \{mgr.brief.length()}",
+  )
+  log("INFO", "Generated milestones at \{milestones_path}")
+  (milestones_path, mgr)
+}
+
+///|
+fn classify_plan_document(
+  doc : @plan.PlanDocument,
+  config : @config.ProjectConfig,
+  backends : Map[String, @agent.BoxedBackend],
+  allow_llm_classification : Bool,
+) -> @ralph.MilestoneManager {
+  let classifications : Array[@plan.SectionClass] = []
+  let uncertain_indexes : Array[Int] = []
+  let uncertain_sections : Array[@plan.PlanSection] = []
+  for i in 0..<doc.sections.length() {
+    let class = @plan.classify_section(doc.sections[i].heading)
+    classifications.push(class)
+    if class == @plan.SectionClass::Uncertain {
+      uncertain_indexes.push(i)
+      uncertain_sections.push(doc.sections[i])
+    }
+  }
+  if not(uncertain_indexes.is_empty()) {
+    let resolved = resolve_uncertain_sections(
+      uncertain_sections, config, backends, allow_llm_classification,
+    )
+    for i in 0..<uncertain_indexes.length() {
+      classifications[uncertain_indexes[i]] = resolved[i]
+    }
+  }
+  @plan.convert_to_milestones(doc, classifications)
+}
+
+///|
+pub fn classify_plan_document_for_test(
+  content : String,
+  config : @config.ProjectConfig,
+  backends : Map[String, @agent.BoxedBackend],
+  allow_llm_classification? : Bool = false,
+) -> @ralph.MilestoneManager {
+  let doc = @plan.parse_plan(content)
+  classify_plan_document(doc, config, backends, allow_llm_classification)
+}
+
+///|
+fn resolve_uncertain_sections(
+  sections : Array[@plan.PlanSection],
+  config : @config.ProjectConfig,
+  backends : Map[String, @agent.BoxedBackend],
+  allow_llm_classification : Bool,
+) -> Array[@plan.SectionClass] {
+  if not(allow_llm_classification) {
+    warn_low_confidence_defaults(sections.length())
+    return default_uncertain_classes(sections.length())
+  }
+  match find_planner_backend(config, backends) {
+    None => {
+      warn_low_confidence_defaults(sections.length())
+      default_uncertain_classes(sections.length())
+    }
+    Some((planner_id, backend)) => {
+      let prompt = @plan.build_classification_prompt(sections)
+      let result = backend.run(prompt, "", fn(event) {
+        match event {
+          OutputLine(line) => log("OUT", "[\{planner_id}] \{line}")
+          Info(msg) => log("INFO", "[\{planner_id}] \{msg}")
+          _ => ()
+        }
+      })
+      match result.status {
+        Completed =>
+          @plan.parse_classification_response(result.content, sections.length())
+        Failed(err) => {
+          log(
+            "WARN",
+            "Planner section classification failed: \{err}; defaulting to milestone",
+          )
+          default_uncertain_classes(sections.length())
+        }
+        _ => default_uncertain_classes(sections.length())
+      }
+    }
+  }
+}
+
+///|
+fn find_planner_backend(
+  config : @config.ProjectConfig,
+  backends : Map[String, @agent.BoxedBackend],
+) -> (String, @agent.BoxedBackend)? {
+  for agent in config.agents {
+    if agent.role == @types.AgentRole::Planner {
+      match backends.get(agent.id) {
+        Some(backend) => return Some((agent.id, backend))
+        None => ()
+      }
+    }
+  }
+  None
+}
+
+///|
+fn default_uncertain_classes(count : Int) -> Array[@plan.SectionClass] {
+  let classes : Array[@plan.SectionClass] = []
+  for _ in 0..<count {
+    classes.push(@plan.SectionClass::Milestone)
+  }
+  classes
+}
+
+///|
+fn warn_low_confidence_defaults(count : Int) -> Unit {
+  log(
+    "WARN",
+    "\{count} sections classified with low confidence (defaulting to milestone)",
+  )
 }
 
 ///|

@@ -52,6 +52,19 @@ extern "js" fn js_write_file_sync(path : String, content : String) -> Unit =
   #|}
 
 ///|
+/// Create a directory recursively.
+pub fn mkdir_p_sync(path : String) -> Unit {
+  js_mkdir_p_sync(path)
+}
+
+///|
+extern "js" fn js_mkdir_p_sync(path : String) -> Unit =
+  #|(path) => {
+  #|  const fs = require('fs');
+  #|  fs.mkdirSync(path, { recursive: true });
+  #|}
+
+///|
 /// Append to a file synchronously
 pub fn append_file_sync(path : String, content : String) -> Unit {
   js_append_file_sync(path, content)
@@ -116,9 +129,14 @@ extern "js" fn js_start_stdin_watcher() -> Unit =
   #|() => {
   #|  const { spawn } = require('child_process');
   #|  const path = require('path');
-  #|  const { mkdirSync } = require('fs');
+  #|  const { existsSync, mkdirSync } = require('fs');
   #|  try { mkdirSync('.whirlwind', { recursive: true }); } catch {}
-  #|  const watcherPath = path.join(__dirname, '..', 'sdk', 'stdin-watcher.mjs');
+  #|  const candidates = [
+  #|    path.join(__dirname, '..', 'sdk', 'stdin-watcher.mjs'),
+  #|    path.join(process.cwd(), 'sdk', 'stdin-watcher.mjs'),
+  #|  ];
+  #|  const watcherPath = candidates.find(existsSync);
+  #|  if (!watcherPath) return;
   #|  const watcher = spawn(process.execPath, [watcherPath], {
   #|    stdio: ['inherit', 'pipe', 'inherit'],
   #|    detached: false,
@@ -191,6 +209,31 @@ pub fn now_timestamp() -> String {
 extern "js" fn js_now_timestamp() -> String =
   #|() => {
   #|  const path = require('path');
-  #|  const { nowTimestamp } = require(path.join(__dirname, '..', 'sdk', 'now-timestamp.cjs'));
+  #|  const { existsSync } = require('fs');
+  #|  const candidates = [
+  #|    path.join(__dirname, '..', 'sdk', 'now-timestamp.cjs'),
+  #|    path.join(process.cwd(), 'sdk', 'now-timestamp.cjs'),
+  #|  ];
+  #|  const modulePath = candidates.find(existsSync);
+  #|  if (!modulePath) {
+  #|    const d = new Date();
+  #|    const pad = (n) => String(n).padStart(2, '0');
+  #|    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  #|  }
+  #|  const { nowTimestamp } = require(modulePath);
   #|  return nowTimestamp();
+  #|}
+
+///|
+/// Get current run timestamp as "YYYY-MM-DD_HHMM" string.
+pub fn now_run_timestamp() -> String {
+  js_now_run_timestamp()
+}
+
+///|
+extern "js" fn js_now_run_timestamp() -> String =
+  #|() => {
+  #|  const d = new Date();
+  #|  const pad = (n) => String(n).padStart(2, '0');
+  #|  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
   #|}
