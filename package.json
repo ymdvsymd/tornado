@@ -31,7 +31,7 @@
   "author": "ymdvsymd",
   "license": "MIT",
   "scripts": {
-    "build:sdk": "tsc -p tsconfig.sdk.json && if [ -x node_modules/.bin/prettier ]; then node_modules/.bin/prettier --write sdk/*.mjs sdk/*.mts; fi"
+    "build:sdk": "tsc -p tsconfig.sdk.json && prettier --write sdk/*.mjs sdk/*.mts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.49",
@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "prettier": "^3.8.1",
     "typescript": "^5.9.3"
   }
 }
