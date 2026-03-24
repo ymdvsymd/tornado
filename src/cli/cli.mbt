@@ -9,6 +9,8 @@ pub(all) enum CliCommand {
     builder_model~ : String?,
     verifier_model~ : String?,
     milestones_path~ : String?,
+    plan_path~ : String?,
+    dry_run~ : Bool,
     lang~ : String?,
     log_path~ : String?,
     warnings~ : Array[String]
@@ -36,6 +38,8 @@ pub fn parse_cli_args(
       builder_model=None,
       verifier_model=None,
       milestones_path=None,
+      plan_path=None,
+      dry_run=false,
       lang=None,
       log_path=None,
       warnings=[],
@@ -133,6 +137,8 @@ fn parse_run_args(
   let mut builder_model : String? = None
   let mut verifier_model : String? = None
   let mut milestones_path : String? = None
+  let mut plan_path : String? = None
+  let mut dry_run : Bool = false
   let mut lang : String? = None
   let mut log_path : String? = None
   let warnings : Array[String] = []
@@ -217,8 +223,25 @@ fn parse_run_args(
       continue
     }
 
+    if token.has_prefix("--plan=") {
+      let path = token.view(start_offset="--plan=".length()).to_string()
+      if path.is_empty() {
+        warnings.push("Missing value for --plan")
+      } else {
+        plan_path = Some(path)
+      }
+      i += 1
+      continue
+    }
+
     // --ralph is the default mode; flag accepted for explicitness
     if token == "--ralph" {
+      i += 1
+      continue
+    }
+
+    if token == "--dry-run" {
+      dry_run = true
       i += 1
       continue
     }
@@ -308,6 +331,8 @@ fn parse_run_args(
     builder_model~,
     verifier_model~,
     milestones_path~,
+    plan_path~,
+    dry_run~,
     lang~,
     log_path~,
     warnings~,

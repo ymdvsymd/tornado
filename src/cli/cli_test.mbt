@@ -73,6 +73,90 @@ test "parse_cli_args --milestones=path" {
 }
 
 ///|
+test "parse_cli_args --plan=path" {
+  let args = ["whirlwind", "--plan=path/to/plan.md"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(plan_path~, warnings~, ..) => {
+      inspect(plan_path, content="Some(\"path/to/plan.md\")")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --plan= empty warns" {
+  let args = ["whirlwind", "--plan="]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(plan_path~, warnings~, ..) => {
+      inspect(plan_path, content="None")
+      assert_true(warnings.length() == 1)
+      assert_true(warnings[0].contains("Missing value for --plan"))
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --dry-run sets dry_run" {
+  let args = ["whirlwind", "--dry-run"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(plan_path~, dry_run~, warnings~, ..) => {
+      inspect(plan_path, content="None")
+      inspect(dry_run, content="true")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args defaults without --plan or --dry-run" {
+  let args = ["whirlwind"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(plan_path~, dry_run~, warnings~, ..) => {
+      inspect(plan_path, content="None")
+      inspect(dry_run, content="false")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --plan with --dry-run" {
+  let args = ["whirlwind", "--plan=file.md", "--dry-run"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(plan_path~, dry_run~, warnings~, ..) => {
+      inspect(plan_path, content="Some(\"file.md\")")
+      inspect(dry_run, content="true")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --dry-run does not interfere with --config" {
+  let args = ["whirlwind", "--config=config.json", "--dry-run"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(config_path=config, plan_path~, dry_run~, warnings~, ..) => {
+      inspect(config, content="Some(\"config.json\")")
+      inspect(plan_path, content="None")
+      inspect(dry_run, content="true")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
 test "parse_cli_args validate command" {
   let args = ["whirlwind", "validate", "config.json"]
   let parsed = @cli.parse_cli_args(args, file_exists_mock)
