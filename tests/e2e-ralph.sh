@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 MODE="${1:-mock}"   # "mock", "live", "mock-flags", "live-flags"
+shift || true
+EXTRA_ARGS=("$@")
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -21,6 +23,28 @@ case "$MODE" in
     exit 1
     ;;
 esac
+
+has_arg_prefix() {
+  local prefix="$1"
+  local arg
+  for arg in "${EXTRA_ARGS[@]}"; do
+    if [[ "$arg" == "$prefix"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+has_arg_exact() {
+  local expected="$1"
+  local arg
+  for arg in "${EXTRA_ARGS[@]}"; do
+    if [[ "$arg" == "$expected" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
 
 build_live_brief() {
   local plan_file="$1"
@@ -109,7 +133,19 @@ if [ "$MODE" = "mock" ] || [ "$MODE" = "live" ]; then
 EOF
 fi
 
-cat >"$TMP_DIR/milestones.json" <<EOF
+if [ "$MODE" = "mock" ]; then
+  cat >"$TMP_DIR/plan.md" <<'EOF'
+# Dry Run Plan
+
+## Context
+This is brief context for the dry-run e2e test.
+
+## Step 1
+Implement the CLI flow for --plan and verify milestone generation.
+EOF
+else
+  if ! has_arg_prefix "--plan="; then
+    cat >"$TMP_DIR/milestones.json" <<EOF
 {
   "brief": $(node -p 'JSON.stringify(process.argv[1])' "$BRIEF"),
   "milestones": [
@@ -130,6 +166,8 @@ cat >"$TMP_DIR/milestones.json" <<EOF
   ]
 }
 EOF
+  fi
+fi
 
 cd "$TMP_DIR"
 # Unset CLAUDECODE to allow Claude Agent SDK to spawn Claude Code subprocesses
@@ -137,8 +175,16 @@ cd "$TMP_DIR"
 unset CLAUDECODE
 set +e
 case "$MODE" in
-  mock|live)
-    node "$ROOT_DIR/bin/whirlwind.js" --config=whirlwind.json --log="$LOG_FILE" 2>&1 | tee "$OUTPUT_FILE"
+  mock)
+    node "$ROOT_DIR/bin/whirlwind.js" --plan="$TMP_DIR/plan.md" --dry-run --planner="$PLANNER_KIND" --builder="$BUILDER_KIND" --verifier="$VERIFIER_KIND" --log="$LOG_FILE" 2>&1 | tee "$OUTPUT_FILE"
+    CMD_STATUS=${PIPESTATUS[0]}
+    ;;
+  live)
+    if [ "${#EXTRA_ARGS[@]}" -gt 0 ]; then
+      node "$ROOT_DIR/bin/whirlwind.js" --planner="$PLANNER_KIND" --builder="$BUILDER_KIND" --verifier="$VERIFIER_KIND" --log="$LOG_FILE" "${EXTRA_ARGS[@]}" 2>&1 | tee "$OUTPUT_FILE"
+    else
+      node "$ROOT_DIR/bin/whirlwind.js" --config=whirlwind.json --log="$LOG_FILE" 2>&1 | tee "$OUTPUT_FILE"
+    fi
     CMD_STATUS=${PIPESTATUS[0]}
     ;;
   mock-flags|live-flags)
@@ -149,6 +195,10 @@ esac
 set -e
 
 OUTPUT="$(cat "$OUTPUT_FILE")"
+LIVE_PLAN_DRY_RUN=false
+if [ "$MODE" = "live" ] && has_arg_prefix "--plan=" && has_arg_exact "--dry-run"; then
+  LIVE_PLAN_DRY_RUN=true
+fi
 
 if [ "$CMD_STATUS" -ne 0 ]; then
   echo "FAIL: whirlwind exited with code $CMD_STATUS" >&2
@@ -194,11 +244,40 @@ assert_milestone_summary_non_empty() {
   ' "$file" "$milestone_id"
 }
 
-assert_contains "Milestone m1 complete"
-assert_contains "Milestone m2 complete"
-assert_contains "Milestones saved to milestones.json"
+assert_pending_milestone_exists() {
+  local file="$1"
+  node -e '
+    const fs = require("fs");
+    const file = process.argv[1];
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (typeof data.brief !== "string" || data.brief.trim() === "") {
+      console.error("FAIL: expected non-empty brief");
+      process.exit(1);
+    }
+    if (!Array.isArray(data.milestones) || data.milestones.length === 0) {
+      console.error("FAIL: expected at least one milestone");
+      process.exit(1);
+    }
+    if (!data.milestones.some((m) => m && m.status === "pending")) {
+      console.error("FAIL: expected at least one pending milestone");
+      process.exit(1);
+    }
+  ' "$file"
+}
 
-assert_milestone_summary_non_empty "$TMP_DIR/milestones.json" "m1"
+if [ "$MODE" = "mock" ] || [ "$LIVE_PLAN_DRY_RUN" = true ]; then
+  RUN_MILESTONES="$(find "$TMP_DIR/.runs" -name milestones.json -print -quit 2>/dev/null || true)"
+  if [ -z "$RUN_MILESTONES" ]; then
+    echo "FAIL: expected generated milestones.json under $TMP_DIR/.runs" >&2
+    exit 1
+  fi
+  assert_pending_milestone_exists "$RUN_MILESTONES"
+else
+  assert_contains "Milestone m1 complete"
+  assert_contains "Milestone m2 complete"
+  assert_contains "Milestones saved to milestones.json"
+  assert_milestone_summary_non_empty "$TMP_DIR/milestones.json" "m1"
+fi
 
 if [ ! -f "$LOG_FILE" ]; then
   echo "FAIL: expected log file to exist: $LOG_FILE" >&2
@@ -210,10 +289,15 @@ if grep -P '\x1b\[' "$LOG_FILE" 2>/dev/null; then
   exit 1
 fi
 
-assert_file_contains "$LOG_FILE" "Milestone m1 complete"
-assert_file_contains "$LOG_FILE" "Milestone m2 complete"
+if [ "$MODE" = "mock" ] || [ "$LIVE_PLAN_DRY_RUN" = true ]; then
+  assert_file_contains "$LOG_FILE" "Generated milestones at .runs/"
+  assert_contains "Dry-run complete"
+else
+  assert_file_contains "$LOG_FILE" "Milestone m1 complete"
+  assert_file_contains "$LOG_FILE" "Milestone m2 complete"
+fi
 
-if [ "$MODE" = "live" ] || [ "$MODE" = "live-flags" ]; then
+if { [ "$MODE" = "live" ] || [ "$MODE" = "live-flags" ]; } && [ "$LIVE_PLAN_DRY_RUN" != true ]; then
   assert_contains "SCOPE:"
   assert_file_contains "$LOG_FILE" "SCOPE:"
 fi
