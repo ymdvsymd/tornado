@@ -70,6 +70,13 @@ pub fn OutputLineBuffer::flush(Self, (String) -> Unit) -> Unit
 pub fn OutputLineBuffer::new() -> Self
 pub fn OutputLineBuffer::push(Self, String, (String) -> Unit) -> Unit
 
+pub struct SequenceMockBackend {
+  responses : Array[String]
+  mut call_index : Int
+}
+pub fn SequenceMockBackend::boxed(Self) -> BoxedBackend
+pub fn SequenceMockBackend::new(Array[String]) -> Self
+
 pub struct SubprocessBackend {
   kind : @types.AgentKind
   model : String

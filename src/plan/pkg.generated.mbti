@@ -1,0 +1,46 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "ymdvsymd/whirlwind/plan"
+
+import {
+  "ymdvsymd/whirlwind/ralph",
+}
+
+// Values
+pub fn build_classification_prompt(Array[PlanSection]) -> String
+
+pub fn classify_section(String) -> SectionClass
+
+pub fn convert_to_milestones(PlanDocument, Array[SectionClass]) -> @ralph.MilestoneManager
+
+pub fn generate_run_dir_name(String, String) -> String
+
+pub fn parse_classification_response(String, Int) -> Array[SectionClass]
+
+pub fn parse_plan(String) -> PlanDocument
+
+// Errors
+
+// Types and methods
+pub(all) struct PlanDocument {
+  title : String
+  intro : String
+  sections : Array[PlanSection]
+}
+
+pub(all) struct PlanSection {
+  heading : String
+  body : String
+}
+
+pub(all) enum SectionClass {
+  Info
+  Milestone
+  Uncertain
+}
+pub impl Eq for SectionClass
+pub impl Show for SectionClass
+
+// Type aliases
+
+// Traits
+

@@ -1,16 +1,28 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "ymdvsymd/whirlwind/cmd/app"
 
+import {
+  "ymdvsymd/whirlwind/agent",
+  "ymdvsymd/whirlwind/config",
+  "ymdvsymd/whirlwind/ralph",
+}
+
 // Values
 pub fn append_file_sync(String, String) -> Unit
 
 pub fn check_interrupt() -> String
+
+pub fn classify_plan_document_for_test(String, @config.ProjectConfig, Map[String, @agent.BoxedBackend]) -> @ralph.MilestoneManager
 
 pub fn exec_sync(String) -> String
 
 pub fn get_env(String) -> String
 
 pub fn get_log_file() -> String
+
+pub fn mkdir_p_sync(String) -> Unit
+
+pub fn now_run_timestamp() -> String
 
 pub fn now_timestamp() -> String
 
@@ -31,7 +43,6 @@ pub fn write_file_sync(String, String) -> Unit
 // Errors
 
 // Types and methods
-type ReviewOutcome
 
 // Type aliases
 

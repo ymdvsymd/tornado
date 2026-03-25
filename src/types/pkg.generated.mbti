@@ -16,9 +16,6 @@ pub(all) struct AgentConfig {
   kind : AgentKind
   role : AgentRole
   model : String?
-  system_prompt : String?
-  working_dir : String
-  max_iterations : Int
 }
 
 pub(all) enum AgentEvent {
@@ -56,7 +53,7 @@ pub fn AgentResult::failed(String) -> Self
 pub fn AgentResult::failed_with_session(String, String) -> Self
 
 pub(all) enum AgentRole {
-  Dev
+  Builder
   Review
   Planner
   Verifier
@@ -149,9 +146,11 @@ pub impl Show for RalphPhase
 pub(all) struct RalphTask {
   id : String
   description : String
-  wave : Int
+  mut wave : Int
   mut status : TaskStatus
   mut result : String?
+  scope : Array[String]
+  depends_on : Array[String]
 }
 
 pub(all) struct ReviewCompleteEvent {
