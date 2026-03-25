@@ -2395,14 +2395,17 @@ test "verify_milestone fails when max rework attempts are exhausted" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
-  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  // Builder returns different results each time to avoid triggering no-change circuit breaker
+  let builder_seq = @agent.SequenceMockBackend::new([
+    "Done v1", "Done v2 reworked", "Done v3 reworked again",
+  ])
   // Verifier always returns needs_rework — never approves
   let verifier_mock = @agent.MockBackend::new(
     default_response="<needs_rework>m1-t1: still broken</needs_rework>",
   )
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
-  backends["builder"] = builder_mock.boxed()
+  backends["builder"] = builder_seq.boxed()
   backends["verifier"] = verifier_mock.boxed()
   let infos : Array[String] = []
   let callbacks : @types.OrchestratorCallbacks = {
@@ -4015,4 +4018,215 @@ test "Info events from handle_event carry agent_id" {
     let _ = ev.agent_id
     let _ = ev.message
   }
+}
+
+///|
+test "is_infra_failure detects all-infra-error pattern" {
+  let items = [
+    "[CodeQuality] Verification failed: [CodeQuality] Codex Exec exited with code 1: Reading prompt from stdin...",
+    "[Performance] Verification failed: [Performance] Codex Exec exited with code 1: Reading prompt from stdin...",
+    "[Security] Verification failed: [Security] Codex Exec exited with code 1: Reading prompt from stdin...",
+    "[GoalAlignment] Verification failed: [GoalAlignment] Codex Exec exited with code 1: Reading prompt from stdin...",
+  ]
+  assert_true(@ralph.is_infra_failure(items))
+}
+
+///|
+test "is_infra_failure rejects mixed real and infra errors" {
+  let items = [
+    "[CodeQuality] Verification failed: [CodeQuality] Codex Exec exited with code 1",
+    "m1-t1: [Security] fix validation logic",
+  ]
+  assert_false(@ralph.is_infra_failure(items))
+}
+
+///|
+test "is_infra_failure rejects real code issues" {
+  let items = [
+    "m1-t1: [CodeQuality] fix error handling", "m1-t2: [Security] add input validation",
+  ]
+  assert_false(@ralph.is_infra_failure(items))
+}
+
+///|
+test "is_infra_failure rejects empty items" {
+  let items : Array[String] = []
+  assert_false(@ralph.is_infra_failure(items))
+}
+
+///|
+test "circuit breaker activates on infra failure during verification" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Task completed successfully",
+  )
+  // Verifier backend always fails (simulates infra failure)
+  let verifier_mock = @agent.FailingMockBackend::new(
+    error_msg="Codex Exec exited with code 1: Reading prompt from stdin...",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Milestone should fail with infra failure
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
+  // Should log circuit breaker activation
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("Circuit breaker") && msg.contains("infrastructure")
+    }),
+  )
+  // Rework should NOT be attempted (circuit breaker skips rework)
+  assert_false(infos.iter().any(fn(msg) { msg.contains("Reworking task") }))
+}
+
+///|
+test "circuit breaker activates when builder produces no changes for 2 consecutive reworks" {
+  let planner_agent : @types.AgentConfig = {
+    id: "planner",
+    kind: Mock,
+    role: Planner,
+    model: None,
+  }
+  let builder_agent : @types.AgentConfig = {
+    id: "builder",
+    kind: Mock,
+    role: Builder,
+    model: None,
+  }
+  let verifier_agent : @types.AgentConfig = {
+    id: "verifier",
+    kind: Mock,
+    role: Verifier,
+    model: None,
+  }
+  let config : @config.ProjectConfig = {
+    agents: [planner_agent, builder_agent, verifier_agent],
+    parse_warnings: [],
+    milestones_path: None,
+    max_rework_attempts: 5, // high limit so circuit breaker fires first
+  }
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  // Builder always returns the same result — no effective changes
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Task completed successfully",
+  )
+  // Verifier always says needs_rework
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<needs_rework>m1-t1: still broken</needs_rework>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Milestone should fail with no-change circuit breaker
+  assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
+  // Should log circuit breaker activation
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("Circuit breaker") && msg.contains("no changes")
+    }),
+  )
+}
+
+///|
+test "normal rework cycle still works when changes are made" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Implement login", "wave": 0, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  // Builder returns different results each time (actual changes made)
+  let builder_seq = @agent.SequenceMockBackend::new([
+    "Initial implementation v1", "Reworked implementation v2",
+  ])
+  // Verifier: first needs_rework, then approved
+  let verifier_seq = @agent.SequenceMockBackend::new([
+    "<needs_rework>m1-t1: missing error handling</needs_rework>", "<needs_rework>m1-t1: missing error handling</needs_rework>",
+    "<needs_rework>m1-t1: missing error handling</needs_rework>", "<needs_rework>m1-t1: missing error handling</needs_rework>",
+    "<wave_approved>", "<wave_approved>", "<wave_approved>", "<wave_approved>",
+  ])
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_seq.boxed()
+  backends["verifier"] = verifier_seq.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Milestone should complete after rework
+  inspect(mgr.milestones[0].status, content="Done")
+  // Should have both rework and approval messages
+  assert_true(infos.iter().any(fn(msg) { msg.contains("rework needed") }))
+  assert_true(infos.iter().any(fn(msg) { msg.contains("approved") }))
 }

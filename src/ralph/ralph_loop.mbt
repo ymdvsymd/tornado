@@ -742,12 +742,40 @@ fn apply_scope_edges(
 }
 
 ///|
+/// Check if all NeedsRework items are from infrastructure failures
+/// (backend errors, not actual code review verdicts)
+pub fn is_infra_failure(items : Array[String]) -> Bool {
+  if items.is_empty() {
+    return false
+  }
+  items.iter().all(fn(item) { item.contains("Verification failed:") })
+}
+
+///|
+/// Check if two result arrays are equal (same task IDs and content)
+fn results_equal(
+  a : Array[(String, String)],
+  b : Array[(String, String)],
+) -> Bool {
+  if a.length() != b.length() {
+    return false
+  }
+  for i in 0..<a.length() {
+    if a[i].0 != b[i].0 || a[i].1 != b[i].1 {
+      return false
+    }
+  }
+  true
+}
+
+///|
 /// Verify milestone after all waves are complete (all 4 perspectives)
 fn RalphLoop::verify_milestone(
   self : RalphLoop,
   milestone : @types.Milestone,
   all_results : Array[(String, String)],
   attempt : Int,
+  no_change_count? : Int = 0,
 ) -> Bool {
   match self.verifier {
     None => true
@@ -779,6 +807,18 @@ fn RalphLoop::verify_milestone(
               true
             }
             NeedsRework(items) => {
+              // Circuit breaker: all perspectives failed with infra errors
+              if is_infra_failure(items) {
+                let reason = "Infrastructure failure detected across all verification perspectives: " +
+                  @util.join_strings(items, " | ")
+                emit_info(
+                  self,
+                  "Circuit breaker: infrastructure failure detected for milestone \{milestone.id}",
+                )
+                milestone.status = Failed(reason)
+                self.save_milestones()
+                return false
+              }
               if attempt >= self.max_rework_attempts {
                 let reason = "Max rework attempts reached with unresolved issues: " +
                   @util.join_strings(items, " | ")
@@ -796,7 +836,25 @@ fn RalphLoop::verify_milestone(
                 "Milestone rework needed for \{milestone.id}: \{items.length()} issues",
               )
               let reworked = self.rework_milestone_tasks(milestone, items)
-              self.verify_milestone(milestone, reworked, attempt + 1)
+              // Circuit breaker: builder produced no effective changes
+              let new_no_change = if results_equal(all_results, reworked) {
+                no_change_count + 1
+              } else {
+                0
+              }
+              if new_no_change >= 2 {
+                let reason = "Circuit breaker: builder produced no changes for 2 consecutive rework attempts"
+                emit_info(self, reason)
+                milestone.status = Failed(reason)
+                self.save_milestones()
+                return false
+              }
+              self.verify_milestone(
+                milestone,
+                reworked,
+                attempt + 1,
+                no_change_count=new_no_change,
+              )
             }
             MilestoneFailed(reason) => {
               emit_info(self, "Milestone failed: \{reason}")
