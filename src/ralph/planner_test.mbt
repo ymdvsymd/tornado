@@ -45,6 +45,26 @@ test "PlannerAgent::parse_plan delegates to MilestoneManager" {
 }
 
 ///|
+test "whirlwind-bqm: planner prompt warns against duplicate work across milestones" {
+  let planner = @ralph.PlannerAgent::new()
+  let milestone : @types.Milestone = {
+    id: "m1",
+    goal: "Add new struct fields\n\nAdd created_at and updated_at to the Foo struct.\nNote: Step 9 will update all existing literals to include these fields.",
+    status: @types.MilestoneStatus::Pending,
+    tasks: [],
+    summary: "",
+  }
+  let prompt = planner.build_plan_prompt(milestone)
+  // The prompt must contain a scope boundary instruction telling the planner
+  // to only create tasks for this milestone's own deliverables, not for work
+  // that belongs to other milestones/steps referenced in the goal text.
+  assert_true(prompt.contains("Scope Boundary"))
+  assert_true(
+    prompt.contains("other milestone") || prompt.contains("other step"),
+  )
+}
+
+///|
 test "PlannerAgent::plan with mock backend" {
   let planner = @ralph.PlannerAgent::new()
   let mgr = @ralph.MilestoneManager::new()

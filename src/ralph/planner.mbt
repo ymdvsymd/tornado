@@ -36,6 +36,12 @@ pub fn PlannerAgent::build_plan_prompt(
   prompt.write_string(milestone.goal)
   prompt.write_string("\n\n")
   prompt.write_string(
+    "## Scope Boundary\n" +
+    "Only create tasks for work that belongs to THIS milestone.\n" +
+    "The goal text may reference other milestones or other steps for context — " +
+    "do NOT include tasks for work that belongs to another milestone or step.\n" +
+    "If the goal mentions future steps (e.g. \"Step 9 will update ...\"), " +
+    "treat those as informational context only, not as work to be planned here.\n\n" +
     "## Instructions\n" +
     "Break down this milestone into concrete tasks grouped by waves.\n" +
     "Tasks in the same wave can be executed independently.\n" +
