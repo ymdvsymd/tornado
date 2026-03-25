@@ -13,6 +13,7 @@ pub(all) enum CliCommand {
     dry_run~ : Bool,
     lang~ : String?,
     log_path~ : String?,
+    max_in_flight~ : Int?,
     warnings~ : Array[String]
   )
   Validate(String?)
@@ -42,6 +43,7 @@ pub fn parse_cli_args(
       dry_run=false,
       lang=None,
       log_path=None,
+      max_in_flight=None,
       warnings=[],
     )
   }
@@ -141,6 +143,7 @@ fn parse_run_args(
   let mut dry_run : Bool = false
   let mut lang : String? = None
   let mut log_path : String? = None
+  let mut max_in_flight : Int? = None
   let warnings : Array[String] = []
 
   let mut i = 0
@@ -284,6 +287,42 @@ fn parse_run_args(
       continue
     }
 
+    if token.has_prefix("--max-in-flight=") {
+      let raw = token.view(start_offset="--max-in-flight=".length()).to_string()
+      let n = parse_positive_int(raw)
+      if n > 0 {
+        max_in_flight = Some(n)
+      } else {
+        warnings.push("--max-in-flight must be a positive integer, got: \{raw}")
+      }
+      i += 1
+      continue
+    }
+
+    if token == "--max-in-flight" {
+      if i + 1 < len {
+        let raw = args[i + 1]
+        if raw.has_prefix("--") {
+          warnings.push("Missing value for --max-in-flight")
+          i += 1
+        } else {
+          let n = parse_positive_int(raw)
+          if n > 0 {
+            max_in_flight = Some(n)
+          } else {
+            warnings.push(
+              "--max-in-flight must be a positive integer, got: \{raw}",
+            )
+          }
+          i += 2
+        }
+      } else {
+        warnings.push("Missing value for --max-in-flight")
+        i += 1
+      }
+      continue
+    }
+
     if token.has_prefix("--log=") {
       let path = token.view(start_offset="--log=".length()).to_string()
       if path.is_empty() {
@@ -335,6 +374,7 @@ fn parse_run_args(
     dry_run~,
     lang~,
     log_path~,
+    max_in_flight~,
     warnings~,
   )
 }
@@ -346,6 +386,26 @@ fn parse_kind_alias(raw : String) -> @types.AgentKind? {
     "codex" => Some(Codex)
     "mock" => Some(Mock)
     _ => None
+  }
+}
+
+///|
+fn parse_positive_int(s : String) -> Int {
+  let chars = s.to_array()
+  let mut num = 0
+  let mut found = false
+  for ch in chars {
+    if ch >= '0' && ch <= '9' {
+      num = num * 10 + (ch.to_int() - '0'.to_int())
+      found = true
+    } else {
+      return 0
+    }
+  }
+  if found {
+    num
+  } else {
+    0
   }
 }
 

@@ -33,6 +33,7 @@ fn main {
       dry_run~,
       lang=cli_lang,
       log_path~,
+      max_in_flight~,
       warnings~
     ) => {
       for w in warnings {
@@ -45,7 +46,7 @@ fn main {
       }
       run_ralph(
         config_path, lang, planner_kind, builder_kind, verifier_kind, planner_model,
-        builder_model, verifier_model, cli_milestones, plan_path, dry_run,
+        builder_model, verifier_model, cli_milestones, plan_path, dry_run, max_in_flight,
       )
     }
     @cli.CliCommand::Validate(path) =>
@@ -92,6 +93,9 @@ fn print_usage() -> Unit {
     "  --lang=auto|ja|en       Review language (default: auto, detected from LANG env)",
   )
   println("  --log=<path>            Log file path")
+  println(
+    "  --max-in-flight=<N>     Max concurrent tasks in DAG execution (default: 1)",
+  )
   println("  --version, -v           Show version")
   println("")
   println(
@@ -113,6 +117,7 @@ fn run_ralph(
   cli_milestones : String?,
   plan_path : String?,
   dry_run : Bool,
+  max_in_flight : Int?,
 ) -> Unit {
   log("INFO", "Starting ralph loop mode...")
   // Load or create config
@@ -201,6 +206,10 @@ fn run_ralph(
     on_save: fn() { write_file_sync(milestones_path, mgr.to_json()) },
   }
   // Run ralph loop
+  let effective_max_in_flight = match max_in_flight {
+    Some(n) => n
+    None => 1
+  }
   let rl = @ralph.RalphLoop::new(
     config,
     mgr,
@@ -208,6 +217,7 @@ fn run_ralph(
     callbacks,
     dry_run~,
     lang~,
+    max_in_flight=effective_max_in_flight,
   )
   rl.run()
   // Save milestones

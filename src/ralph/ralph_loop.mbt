@@ -10,6 +10,7 @@ pub struct RalphLoop {
   mut current_phase : @types.RalphPhase
   dry_run : Bool
   max_rework_attempts : Int
+  max_in_flight : Int
   file_checker : (String) -> Bool
 }
 
@@ -22,6 +23,7 @@ pub fn RalphLoop::new(
   callbacks : @types.OrchestratorCallbacks,
   dry_run? : Bool = false,
   lang? : String = "en",
+  max_in_flight? : Int = 1,
   file_checker? : (String) -> Bool = path_exists,
 ) -> RalphLoop {
   let planner_id = find_agent_id(config, @types.AgentRole::Planner)
@@ -34,6 +36,8 @@ pub fn RalphLoop::new(
     Some(id) => Some(VerifierAgent::new(agent_id=id, lang~))
     None => None
   }
+  // Clamp max_in_flight to >= 1 to prevent infinite loops in batch dispatch
+  let safe_max_in_flight = if max_in_flight < 1 { 1 } else { max_in_flight }
   {
     config,
     milestone_manager,
@@ -44,6 +48,7 @@ pub fn RalphLoop::new(
     current_phase: @types.RalphPhase::LoadingMilestones,
     dry_run,
     max_rework_attempts: config.max_rework_attempts,
+    max_in_flight: safe_max_in_flight,
     file_checker,
   }
 }
@@ -125,7 +130,7 @@ fn RalphLoop::run_milestone(
     emit_info(self, "Milestone \{milestone.id} complete")
     return true
   }
-  // Execute waves
+  // Execute DAG
   let completed_tasks = milestone.tasks
     .iter()
     .filter(fn(task) { task.status == Done })
@@ -138,19 +143,16 @@ fn RalphLoop::run_milestone(
   }
   milestone.status = @types.MilestoneStatus::InProgress
   self.save_milestones()
-  while milestone.has_undone_tasks() {
-    let wave = milestone.next_wave_number()
-    match wave {
-      None => break
-      Some(wave_num) => {
-        let success = self.run_wave(milestone, wave_num)
-        if not(success) {
-          milestone.status = Failed("Wave \{wave_num} failed")
-          self.save_milestones()
-          return false
-        }
+  let dag_success = self.run_dag(milestone)
+  if not(dag_success) {
+    match milestone.status {
+      Failed(_) => ()
+      _ => {
+        milestone.status = Failed("DAG execution failed")
+        self.save_milestones()
       }
     }
+    return false
   }
   let all_results = collect_all_task_results(milestone)
   let verified = self.verify_milestone(milestone, all_results, 0)
@@ -265,39 +267,132 @@ fn RalphLoop::ensure_milestone_tasks(
 }
 
 ///|
-/// Run a single wave: execute tasks, then verify
-fn RalphLoop::run_wave(
-  self : RalphLoop,
-  milestone : @types.Milestone,
-  wave : Int,
-) -> Bool {
-  self.current_phase = ExecutingWave(milestone.id, wave)
-  emit_info(self, "Executing wave \{wave} of \{milestone.id}")
-  let moved = self.resolve_scope_conflicts(milestone, wave)
-  if moved > 0 {
+/// Run all milestone tasks as a DAG using Kahn's layer computation.
+///
+/// Adds implicit edges (wave compat + scope overlaps), computes layers,
+/// then dispatches tasks via a ready-queue respecting max_in_flight.
+fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
+  self.current_phase = ExecutingDag(milestone.id)
+  emit_info(self, "Executing DAG for \{milestone.id}")
+
+  // Build wave barriers for legacy WAVE tasks (design D2)
+  // Barriers are compact (prev_ids, curr_ids) pairs — no O(N*M) edge tuples
+  let wave_barriers = build_wave_barriers(milestone.tasks)
+  if not(wave_barriers.is_empty()) {
+    let mut edge_count = 0
+    for barrier in wave_barriers {
+      let (prev, curr) = barrier
+      edge_count = edge_count + prev.length() * curr.length()
+    }
     emit_info(
       self,
-      "Pre-wave scope check: moved \{moved} tasks from wave \{wave}",
+      "Applied \{wave_barriers.length()} wave barriers (\{edge_count} implicit deps)",
+    )
+  }
+
+  // Add implicit scope-overlap edges into depends_on
+  let scope_edges = add_scope_edges(milestone.tasks)
+  // apply_scope_edges returns only actually-inserted edges (skipping
+  // edges that duplicate pre-existing explicit deps). The revert phase
+  // must use inserted_scope_edges — NOT scope_edges — to avoid removing
+  // explicit deps that happen to coincide with a scope edge.
+  let inserted_scope_edges = apply_scope_edges(milestone.tasks, scope_edges)
+  if not(inserted_scope_edges.is_empty()) {
+    emit_info(
+      self,
+      "Added \{inserted_scope_edges.length()} implicit edges from scope overlaps",
     )
     self.save_milestones()
   }
-  let tasks = milestone.get_wave_tasks(wave)
-  let pending_tasks : Array[@types.RalphTask] = []
-  let mut done_count = 0
-  for task in tasks {
-    match task.status {
-      Done => done_count += 1
-      _ => pending_tasks.push(task)
+
+  // Compute layers for cycle detection and logging
+  let (layers, cycle_tasks, dag_warnings) = compute_layers(milestone.tasks)
+  for w in dag_warnings {
+    emit_info(self, "DAG warning: \{w}")
+  }
+  // Log layer computation results
+  if not(layers.is_empty()) {
+    let layer_groups : Map[Int, Array[String]] = {}
+    for entry in layers {
+      let (tid, l) = entry
+      match layer_groups.get(l) {
+        Some(arr) => arr.push(tid)
+        None => layer_groups[l] = [tid]
+      }
+    }
+    let layer_nums : Array[Int] = []
+    for entry in layer_groups {
+      let (l, _) = entry
+      layer_nums.push(l)
+    }
+    layer_nums.sort()
+    let parts : Array[String] = []
+    for l in layer_nums {
+      let ids = layer_groups.get(l).unwrap()
+      let id_list = @util.join_strings(ids, ", ")
+      parts.push("layer \{l}: [\{id_list}]")
+    }
+    let summary = @util.join_strings(parts, ", ")
+    emit_info(self, "DAG layers computed: \{summary}")
+  }
+  if not(cycle_tasks.is_empty()) {
+    let cycle_list = @util.join_strings(cycle_tasks, ", ")
+    emit_info(
+      self,
+      "Cycle detected in tasks: \{cycle_list}; falling back to layer 0",
+    )
+    // Revert only actually-inserted scope edges for cycle tasks
+    if not(inserted_scope_edges.is_empty()) {
+      let cycle_set : Map[String, Bool] = {}
+      for tid in cycle_tasks {
+        cycle_set[tid] = true
+      }
+      // Build lookup: to_id → set of scope-added from_ids to remove
+      let scope_deps_to_remove : Map[String, Map[String, Bool]] = {}
+      for edge in inserted_scope_edges {
+        let (from_id, to_id) = edge
+        if cycle_set.contains(to_id) {
+          match scope_deps_to_remove.get(to_id) {
+            Some(s) => s[from_id] = true
+            None => {
+              let s : Map[String, Bool] = {}
+              s[from_id] = true
+              scope_deps_to_remove[to_id] = s
+            }
+          }
+        }
+      }
+      let mut reverted = 0
+      for task in milestone.tasks {
+        match scope_deps_to_remove.get(task.id) {
+          Some(to_remove) => {
+            let clean : Array[String] = task.depends_on
+              .iter()
+              .filter(fn(dep) { not(to_remove.contains(dep)) })
+              .collect()
+            let removed = task.depends_on.length() - clean.length()
+            if removed > 0 {
+              task.depends_on.clear()
+              for d in clean {
+                task.depends_on.push(d)
+              }
+              reverted = reverted + removed
+            }
+          }
+          None => ()
+        }
+      }
+      if reverted > 0 {
+        emit_info(
+          self,
+          "Reverted \{reverted} scope edges from cycle tasks to break cycle",
+        )
+        self.save_milestones()
+      }
     }
   }
-  if done_count > 0 {
-    emit_info(self, "Wave \{wave}: skipping \{done_count} already-done tasks")
-  }
-  if pending_tasks.is_empty() {
-    emit_info(self, "Wave \{wave}: all tasks already done, skipping")
-    return true
-  }
-  // Find builder backend (first Builder agent)
+
+  // Find builder backend
   let builder_id = find_agent_id(self.config, @types.AgentRole::Builder)
   let builder_backend = match builder_id {
     Some(id) => find_backend(self.backends, id)
@@ -306,6 +401,8 @@ fn RalphLoop::run_wave(
   match builder_backend {
     None => {
       emit_info(self, "No builder backend found")
+      milestone.status = Failed("No builder backend")
+      self.save_milestones()
       return false
     }
     Some(backend) => {
@@ -313,51 +410,238 @@ fn RalphLoop::run_wave(
       let builder_system_prompt = build_builder_system_prompt(
         self.milestone_manager.brief,
       )
-      let builder_tasks : Array[(String, String)] = []
-      for task in pending_tasks {
-        task.status = InProgress(bid)
-        emit_info(self, "Running task \{task.id}: \{task.description}")
-        builder_tasks.push((task.description, builder_system_prompt))
+
+      // Build task map (id→task) for O(1) lookups and reverse-dep map
+      let task_map : Map[String, @types.RalphTask] = {}
+      for t in milestone.tasks {
+        task_map[t.id] = t
       }
-      let results = run_builder_tasks_serially(
-        self,
-        backend,
-        bid,
-        pending_tasks,
-        builder_tasks,
-        "wave \{wave} of \{milestone.id}",
-      )
-      for i in 0..<pending_tasks.length() {
-        let task = pending_tasks[i]
-        let result = results[i]
-        match result.status {
-          Completed => {
-            task.status = Done
-            task.result = Some(result.content)
-            emit_info(self, "Task \{task.id} completed")
+      let deps_remaining : Map[String, Int] = {}
+      let reverse_deps : Map[String, Array[String]] = {}
+      for t in milestone.tasks {
+        reverse_deps[t.id] = []
+      }
+      for t in milestone.tasks {
+        let mut count = 0
+        for dep in t.depends_on {
+          if dep != t.id && task_map.contains(dep) {
+            count = count + 1
+            match reverse_deps.get(dep) {
+              Some(succs) => succs.push(t.id)
+              None => ()
+            }
           }
-          _ => {
-            let err = result.error.unwrap_or("unknown error")
-            task.status = Failed(err)
-            task.result = Some(result.content)
-            emit_info(self, "Task \{task.id} failed: \{err}")
+        }
+        deps_remaining[t.id] = count
+      }
+
+      // Inject wave barrier deps into deps_remaining (no edge materialization)
+      let wave_barrier_map : Map[String, Int] = {}
+      let mut barrier_idx = 0
+      for barrier in wave_barriers {
+        let (prev_ids, curr_ids) = barrier
+        for prev_id in prev_ids {
+          wave_barrier_map[prev_id] = barrier_idx
+        }
+        for curr_id in curr_ids {
+          match deps_remaining.get(curr_id) {
+            Some(d) => deps_remaining[curr_id] = d + prev_ids.length()
+            None => ()
+          }
+        }
+        barrier_idx = barrier_idx + 1
+      }
+
+      // Propagate already-done tasks and seed ready queue
+      let done_set : Map[String, Bool] = {}
+      for t in milestone.tasks {
+        if t.status == Done {
+          done_set[t.id] = true
+        }
+      }
+      let already_done = done_set.length()
+      if already_done > 0 {
+        emit_info(self, "Skipping \{already_done} already-done tasks")
+      }
+      for t in milestone.tasks {
+        if t.status == Done {
+          // Propagate through explicit deps
+          match reverse_deps.get(t.id) {
+            Some(succs) =>
+              for succ in succs {
+                match deps_remaining.get(succ) {
+                  Some(d) => deps_remaining[succ] = d - 1
+                  None => ()
+                }
+              }
+            None => ()
+          }
+          // Propagate through wave barriers
+          match wave_barrier_map.get(t.id) {
+            Some(bi) => {
+              let (_, curr_ids) = wave_barriers[bi]
+              for curr_id in curr_ids {
+                match deps_remaining.get(curr_id) {
+                  Some(d) => deps_remaining[curr_id] = d - 1
+                  None => ()
+                }
+              }
+            }
+            None => ()
           }
         }
       }
-      if pending_tasks.iter().any(fn(task) { task.status is Failed(_) }) {
+      let ready_queue : Array[@types.RalphTask] = []
+      for t in milestone.tasks {
+        if t.status != Done {
+          match deps_remaining.get(t.id) {
+            Some(0) => ready_queue.push(t)
+            _ => ()
+          }
+        }
+      }
+
+      // Track all results for post-execution file conflict check
+      let all_completed : Array[(@types.RalphTask, @types.AgentResult)] = []
+
+      // Ready-queue dispatch loop with slot-refilling after each completion.
+      // Two indices: qi = next to dispatch, ei = next to execute.
+      // After executing ONE task, we return to dispatch phase to refill
+      // open slots — enabling successors unblocked by the completion to
+      // start immediately rather than waiting for an entire batch.
+      let mut qi = 0
+      let mut ei = 0
+      let mut in_flight = 0
+      let mut failed = false
+      while qi < ready_queue.length() || ei < qi {
+        // Dispatch phase: fill slots up to max_in_flight
+        let dispatched_any = qi < ready_queue.length() &&
+          in_flight < self.max_in_flight
+        while qi < ready_queue.length() && in_flight < self.max_in_flight {
+          let task = ready_queue[qi]
+          task.status = InProgress(bid)
+          in_flight = in_flight + 1
+          emit_info(
+            self,
+            "Dispatching task \{task.id} (in_flight: \{in_flight}/\{self.max_in_flight})",
+          )
+          qi = qi + 1
+        }
+        if not(dispatched_any) && ei >= qi {
+          break
+        }
+
+        // Execute ONE task (slot-refilling: return to dispatch after each)
+        if ei < qi {
+          let task = ready_queue[ei]
+          ei = ei + 1
+          let result = backend.run(task.description, builder_system_prompt, fn(
+            e,
+          ) {
+            handle_event(self, bid, e)
+          })
+          let validated = validate_builder_result(self, task, result)
+          in_flight = in_flight - 1
+          match validated.status {
+            Completed => {
+              task.status = Done
+              task.result = Some(validated.content)
+              done_set[task.id] = true
+              all_completed.push((task, validated))
+              emit_info(self, "Task \{task.id} completed")
+              // Propagate completion: unblock dependents (explicit deps)
+              match reverse_deps.get(task.id) {
+                Some(succs) =>
+                  for succ in succs {
+                    match deps_remaining.get(succ) {
+                      Some(d) => {
+                        let new_d = d - 1
+                        deps_remaining[succ] = new_d
+                        if new_d == 0 {
+                          match task_map.get(succ) {
+                            Some(t) =>
+                              if not(t.status is Done) &&
+                                not(t.status is Failed(_)) {
+                                ready_queue.push(t)
+                              }
+                            None => ()
+                          }
+                        }
+                      }
+                      None => ()
+                    }
+                  }
+                None => ()
+              }
+              // Propagate completion: unblock wave barrier dependents
+              match wave_barrier_map.get(task.id) {
+                Some(bi) => {
+                  let (_, curr_ids) = wave_barriers[bi]
+                  for curr_id in curr_ids {
+                    match deps_remaining.get(curr_id) {
+                      Some(d) => {
+                        let new_d = d - 1
+                        deps_remaining[curr_id] = new_d
+                        if new_d == 0 {
+                          match task_map.get(curr_id) {
+                            Some(t) =>
+                              if not(t.status is Done) &&
+                                not(t.status is Failed(_)) {
+                                ready_queue.push(t)
+                              }
+                            None => ()
+                          }
+                        }
+                      }
+                      None => ()
+                    }
+                  }
+                }
+                None => ()
+              }
+            }
+            _ => {
+              let err = validated.error.unwrap_or("unknown error")
+              task.status = Failed(err)
+              task.result = Some(validated.content)
+              emit_info(self, "Task \{task.id} failed: \{err}")
+              // Cascade failure to all transitive dependents
+              self.cascade_fail(
+                task.id,
+                task_map,
+                reverse_deps,
+                wave_barriers,
+                wave_barrier_map,
+              )
+              failed = true
+            }
+          }
+          self.save_milestones()
+          if failed {
+            emit_info(self, "DAG execution failed: task failure")
+            return false
+          }
+        }
+      }
+
+      // Check for stuck tasks (pending but never became ready — cycle fallback)
+      let stuck_count = milestone.tasks
+        .iter()
+        .filter(fn(t) { not(t.status is Done) && not(t.status is Failed(_)) })
+        .count()
+      if stuck_count > 0 {
         emit_info(
           self,
-          "Wave \{wave} failed because one or more builder tasks failed",
+          "DAG execution stuck: \{stuck_count} tasks never became ready",
         )
-        self.save_milestones()
         return false
       }
-      // Detect file conflicts between parallel builders in this wave
-      if pending_tasks.length() > 1 {
+
+      // Post-execution file conflict detection (informational)
+      if all_completed.length() > 1 {
         let task_files : Array[(@types.RalphTask, Array[String])] = []
-        for i in 0..<pending_tasks.length() {
-          let task = pending_tasks[i]
-          let result = results[i]
+        for pair in all_completed {
+          let (task, result) = pair
           let changed = extract_changed_files(result.content)
           if not(changed.is_empty()) {
             task_files.push((task, changed))
@@ -375,10 +659,109 @@ fn RalphLoop::run_wave(
           }
         }
       }
-      self.save_milestones() // persist after wave task execution
     }
   }
   true
+}
+
+///|
+/// Cascade failure to all transitive dependents of a failed task.
+///
+/// BFS through reverse_deps (explicit deps) and wave_barrier_map to find
+/// all tasks that transitively depend on the failed task, marking them as
+/// Failed("blocked by failed task {id}").
+fn RalphLoop::cascade_fail(
+  self : RalphLoop,
+  failed_id : String,
+  task_map : Map[String, @types.RalphTask],
+  reverse_deps : Map[String, Array[String]],
+  wave_barriers : Array[(Array[String], Array[String])],
+  wave_barrier_map : Map[String, Int],
+) -> Unit {
+  let visited : Map[String, Bool] = {}
+  visited[failed_id] = true
+  let queue : Array[String] = [failed_id]
+  let mut qi = 0
+  while qi < queue.length() {
+    let current = queue[qi]
+    qi = qi + 1
+    // Propagate through explicit reverse deps
+    match reverse_deps.get(current) {
+      Some(succs) =>
+        for succ in succs {
+          if not(visited.contains(succ)) {
+            visited[succ] = true
+            match task_map.get(succ) {
+              Some(t) =>
+                if not(t.status is Done) && not(t.status is Failed(_)) {
+                  t.status = Failed("blocked by failed task \{failed_id}")
+                  emit_info(
+                    self,
+                    "Task \{succ} cascade-failed: blocked by \{failed_id}",
+                  )
+                  queue.push(succ)
+                }
+              None => ()
+            }
+          }
+        }
+      None => ()
+    }
+    // Propagate through wave barriers
+    match wave_barrier_map.get(current) {
+      Some(bi) => {
+        let (_, curr_ids) = wave_barriers[bi]
+        for curr_id in curr_ids {
+          if not(visited.contains(curr_id)) {
+            visited[curr_id] = true
+            match task_map.get(curr_id) {
+              Some(t) =>
+                if not(t.status is Done) && not(t.status is Failed(_)) {
+                  t.status = Failed("blocked by failed task \{failed_id}")
+                  emit_info(
+                    self,
+                    "Task \{curr_id} cascade-failed: blocked by \{failed_id}",
+                  )
+                  queue.push(curr_id)
+                }
+              None => ()
+            }
+          }
+        }
+      }
+      None => ()
+    }
+  }
+}
+
+///|
+/// Apply scope-overlap edges to tasks' depends_on arrays.
+/// Returns only the edges that were actually inserted (skipping duplicates
+/// of already-existing explicit deps). The caller must use this returned
+/// set — not the original scope_edges — for any revert operations.
+fn apply_scope_edges(
+  tasks : Array[@types.RalphTask],
+  edges : Array[(String, String)],
+) -> Array[(String, String)] {
+  // Build a map for quick lookup of tasks by ID
+  let task_map : Map[String, @types.RalphTask] = {}
+  for task in tasks {
+    task_map[task.id] = task
+  }
+  let inserted : Array[(String, String)] = []
+  // Add edges: (from_id, to_id) means to_id depends on from_id
+  for edge in edges {
+    let (from_id, to_id) = edge
+    match task_map.get(to_id) {
+      Some(task) =>
+        if not(task.depends_on.contains(from_id)) {
+          task.depends_on.push(from_id)
+          inserted.push((from_id, to_id))
+        }
+      None => ()
+    }
+  }
+  inserted
 }
 
 ///|
@@ -598,7 +981,7 @@ fn build_planner_system_prompt(
   buf.write_string(
     "You are a planning agent that breaks down milestones into executable tasks.\n" +
     "IMPORTANT: Do NOT write to or modify files under .claude/plans/. " +
-    "Output your plan as plain text only using the WAVE format specified in the prompt.\n\n",
+    "Output your plan as plain text only using the TASKS/DEPENDS_ON format specified in the prompt.\n\n",
   )
   if not(brief.is_empty()) {
     buf.write_string("## Brief\n")
@@ -902,7 +1285,10 @@ pub fn detect_scope_overlaps(
     }
     for file in task.scope {
       match file_owners.get(file) {
-        Some(owners) => owners.push(task.id)
+        Some(owners) =>
+          if not(owners.contains(task.id)) {
+            owners.push(task.id)
+          }
         None => file_owners[file] = [task.id]
       }
     }

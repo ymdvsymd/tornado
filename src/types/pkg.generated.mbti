@@ -136,7 +136,7 @@ pub(all) struct PhaseChangeEvent {
 pub(all) enum RalphPhase {
   LoadingMilestones
   Planning(String)
-  ExecutingWave(String, Int)
+  ExecutingDag(String)
   Verifying(String, Int)
   Reworking(String, Int)
   MilestoneComplete(String)

@@ -411,6 +411,125 @@ test "apply_overrides keeps models when not overridden" {
 }
 
 ///|
+test "parse_cli_args --max-in-flight=4 sets value" {
+  let args = ["whirlwind", "--max-in-flight=4"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="Some(4)")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --max-in-flight=1 explicit serial" {
+  let args = ["whirlwind", "--max-in-flight=1"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="Some(1)")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --max-in-flight=0 warns" {
+  let args = ["whirlwind", "--max-in-flight=0"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="None")
+      assert_true(warnings.length() == 1)
+      assert_true(warnings[0].contains("positive integer"))
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --max-in-flight=abc warns" {
+  let args = ["whirlwind", "--max-in-flight=abc"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="None")
+      assert_true(warnings.length() == 1)
+      assert_true(warnings[0].contains("positive integer"))
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args without --max-in-flight defaults to None" {
+  let args = ["whirlwind", "--builder=codex"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, ..) => inspect(max_in_flight, content="None")
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --max-in-flight=-1 warns" {
+  let args = ["whirlwind", "--max-in-flight=-1"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="None")
+      assert_true(warnings.length() == 1)
+      assert_true(warnings[0].contains("positive integer"))
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --max-in-flight 4 space-separated sets value" {
+  let args = ["whirlwind", "--max-in-flight", "4"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="Some(4)")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --max-in-flight without value warns" {
+  let args = ["whirlwind", "--max-in-flight"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="None")
+      assert_true(warnings.length() == 1)
+      assert_true(warnings[0].contains("Missing value"))
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --max-in-flight followed by flag warns" {
+  let args = ["whirlwind", "--max-in-flight", "--dry-run"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(max_in_flight~, warnings~, ..) => {
+      inspect(max_in_flight, content="None")
+      assert_true(warnings.length() == 1)
+      assert_true(warnings[0].contains("Missing value"))
+    }
+    _ => panic()
+  }
+}
+
+///|
 test "ProjectConfig::preset_ralph" {
   let config = @config.ProjectConfig::preset_ralph()
   assert_true(config.agents.length() == 3)

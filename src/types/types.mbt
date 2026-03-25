@@ -344,6 +344,7 @@ pub(all) struct RalphTask {
   mut status : TaskStatus
   mut result : String?
   scope : Array[String]
+  depends_on : Array[String]
 }
 
 ///|
@@ -396,7 +397,7 @@ pub fn Milestone::next_wave_number(self : Milestone) -> Int? {
 pub(all) enum RalphPhase {
   LoadingMilestones
   Planning(String)
-  ExecutingWave(String, Int)
+  ExecutingDag(String)
   Verifying(String, Int)
   Reworking(String, Int)
   MilestoneComplete(String)

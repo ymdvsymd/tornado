@@ -148,6 +148,7 @@ test "RalphTask creation and status update" {
     id: "m1-t1",
     description: "write tests",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: @types.TaskStatus::Pending,
     result: None,
@@ -164,10 +165,7 @@ test "RalphTask creation and status update" {
 test "RalphPhase show" {
   inspect(@types.RalphPhase::LoadingMilestones, content="LoadingMilestones")
   inspect(@types.RalphPhase::Planning("m1"), content="Planning(\"m1\")")
-  inspect(
-    @types.RalphPhase::ExecutingWave("m1", 0),
-    content="ExecutingWave(\"m1\", 0)",
-  )
+  inspect(@types.RalphPhase::ExecutingDag("m1"), content="ExecutingDag(\"m1\")")
   inspect(@types.RalphPhase::Verifying("m1", 1), content="Verifying(\"m1\", 1)")
   inspect(@types.RalphPhase::Reworking("m1", 0), content="Reworking(\"m1\", 0)")
   inspect(
@@ -219,6 +217,7 @@ test "Milestone::get_wave_tasks filters by wave number" {
         id: "m1-t1",
         description: "a",
         scope: [],
+        depends_on: [],
         wave: 0,
         status: @types.TaskStatus::Pending,
         result: None,
@@ -227,6 +226,7 @@ test "Milestone::get_wave_tasks filters by wave number" {
         id: "m1-t2",
         description: "b",
         scope: [],
+        depends_on: [],
         wave: 0,
         status: @types.TaskStatus::Pending,
         result: None,
@@ -235,6 +235,7 @@ test "Milestone::get_wave_tasks filters by wave number" {
         id: "m1-t3",
         description: "c",
         scope: [],
+        depends_on: [],
         wave: 1,
         status: @types.TaskStatus::Pending,
         result: None,
@@ -260,6 +261,7 @@ test "Milestone::has_undone_tasks detects pending tasks" {
         id: "m1-t1",
         description: "a",
         scope: [],
+        depends_on: [],
         wave: 0,
         status: @types.TaskStatus::Done,
         result: None,
@@ -268,6 +270,7 @@ test "Milestone::has_undone_tasks detects pending tasks" {
         id: "m1-t2",
         description: "b",
         scope: [],
+        depends_on: [],
         wave: 0,
         status: @types.TaskStatus::Pending,
         result: None,
@@ -289,6 +292,7 @@ test "Milestone::has_undone_tasks returns false when all done" {
         id: "m1-t1",
         description: "a",
         scope: [],
+        depends_on: [],
         wave: 0,
         status: @types.TaskStatus::Done,
         result: None,
@@ -310,6 +314,7 @@ test "Milestone::next_wave_number finds lowest pending wave" {
         id: "m1-t1",
         description: "a",
         scope: [],
+        depends_on: [],
         wave: 0,
         status: @types.TaskStatus::Done,
         result: None,
@@ -318,6 +323,7 @@ test "Milestone::next_wave_number finds lowest pending wave" {
         id: "m1-t2",
         description: "b",
         scope: [],
+        depends_on: [],
         wave: 1,
         status: @types.TaskStatus::Pending,
         result: None,
@@ -326,6 +332,7 @@ test "Milestone::next_wave_number finds lowest pending wave" {
         id: "m1-t3",
         description: "c",
         scope: [],
+        depends_on: [],
         wave: 2,
         status: @types.TaskStatus::Pending,
         result: None,

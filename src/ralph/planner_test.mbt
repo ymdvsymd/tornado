@@ -1,5 +1,5 @@
 ///|
-test "PlannerAgent::build_plan_prompt includes milestone info" {
+test "PlannerAgent::build_plan_prompt includes milestone info and DAG format" {
   let planner = @ralph.PlannerAgent::new()
   let milestone : @types.Milestone = {
     id: "m1",
@@ -11,7 +11,12 @@ test "PlannerAgent::build_plan_prompt includes milestone info" {
   let prompt = planner.build_plan_prompt(milestone)
   assert_true(prompt.contains("m1"))
   assert_true(prompt.contains("Build authentication system"))
-  assert_true(prompt.contains("WAVE"))
+  // DAG format: TASKS header and DEPENDS_ON instructions
+  assert_true(prompt.contains("TASKS:"))
+  assert_true(prompt.contains("DEPENDS_ON:"))
+  assert_true(prompt.contains("dependencies"))
+  // Should NOT contain old WAVE format
+  assert_false(prompt.contains("WAVE"))
 }
 
 ///|

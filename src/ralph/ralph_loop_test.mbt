@@ -66,7 +66,7 @@ test "RalphLoop full cycle with single milestone" {
   // Should have info messages about progress
   assert_true(infos.iter().any(fn(m) { m.contains("Ralph loop started") }))
   assert_true(infos.iter().any(fn(m) { m.contains("Planning") }))
-  assert_true(infos.iter().any(fn(m) { m.contains("Executing wave") }))
+  assert_true(infos.iter().any(fn(m) { m.contains("Executing DAG") }))
   assert_true(infos.iter().any(fn(m) { m.contains("approved") }))
   assert_true(infos.iter().any(fn(m) { m.contains("complete") }))
   // Phase should be AllComplete
@@ -378,9 +378,7 @@ test "run_wave skips already-done tasks before submitting to builder" {
   )
   inspect(mgr.milestones[0].tasks[2].result.unwrap(), content="fresh result")
   assert_true(
-    infos
-    .iter()
-    .any(fn(msg) { msg.contains("Wave 0: skipping 2 already-done tasks") }),
+    infos.iter().any(fn(msg) { msg.contains("Skipping 2 already-done tasks") }),
   )
 }
 
@@ -424,13 +422,15 @@ test "run_wave does not emit running logs for already-done tasks" {
   rl.run()
 
   assert_true(
-    not(infos.iter().any(fn(msg) { msg.contains("Running task m1-t1") })),
+    not(infos.iter().any(fn(msg) { msg.contains("Dispatching task m1-t1") })),
   )
-  assert_true(infos.iter().any(fn(msg) { msg.contains("Running task m1-t2") }))
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("Dispatching task m1-t2") }),
+  )
 }
 
 ///|
-test "run_wave resolves scope conflicts before execution" {
+test "run_dag adds scope edges and serializes overlapping tasks" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -481,28 +481,445 @@ test "run_wave resolves scope conflicts before execution" {
 
   rl.run()
 
+  // Builder runs t1 first, then t2 (serialized by scope edge)
   let history = builder_mock.get_history()
   assert_true(history.length() == 2)
   inspect(history[0].0, content="Update shared types")
   inspect(history[1].0, content="Update shared helpers")
-  inspect(mgr.milestones[0].tasks[0].wave, content="0")
-  inspect(mgr.milestones[0].tasks[1].wave, content="1")
   inspect(mgr.milestones[0].tasks[0].status, content="Done")
   inspect(mgr.milestones[0].tasks[1].status, content="Done")
+  // Should log about implicit edges from scope overlaps
   assert_true(
     infos
     .iter()
-    .any(fn(msg) {
-      msg.contains("Pre-wave scope check: moved 1 tasks from wave 0")
-    }),
+    .any(fn(msg) { msg.contains("implicit edges from scope overlaps") }),
   )
+}
+
+///|
+test "run_dag reverts scope edges that create cycle with explicit deps" {
+  let config = make_ralph_config()
+  // A depends on B explicitly; both share scope "shared.ts".
+  // Scope edge A→B (B depends on A) creates cycle A→B→A.
+  // run_dag should detect the cycle, revert scope edge, and execute normally.
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Cycle test", "status": "pending",
+    #|      "tasks": [
+    #|        {
+    #|          "id": "m1-t1",
+    #|          "description": "Task A depends on B",
+    #|          "wave": 0,
+    #|          "scope": ["shared.ts"],
+    #|          "depends_on": ["m1-t2"],
+    #|          "status": "pending"
+    #|        },
+    #|        {
+    #|          "id": "m1-t2",
+    #|          "description": "Task B independent",
+    #|          "wave": 0,
+    #|          "scope": ["shared.ts"],
+    #|          "depends_on": [],
+    #|          "status": "pending"
+    #|        }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  let tasks = mgr.milestones[0].tasks
+
+  // Both tasks should complete (cycle was broken by reverting scope edge)
+  inspect(tasks[0].status, content="Done")
+  inspect(tasks[1].status, content="Done")
+  assert_true(builder_mock.get_history().length() == 2)
+
+  // Scope edge was added then reverted
   assert_true(
     infos
     .iter()
-    .any(fn(msg) {
-      msg.contains("Moved task") && msg.contains("due to scope overlap")
-    }),
+    .any(fn(msg) { msg.contains("implicit edges from scope overlaps") }),
   )
+  assert_true(infos.iter().any(fn(msg) { msg.contains("Cycle detected") }))
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("Reverted") && msg.contains("scope edges") }),
+  )
+
+  // After revert, B's depends_on should NOT contain A (scope edge removed)
+  assert_true(not(tasks[1].depends_on.contains(tasks[0].id)))
+  // A's explicit dep on B is preserved
+  assert_true(tasks[0].depends_on.contains(tasks[1].id))
+
+  // Execution order: B first (no deps), then A (depends on B)
+  let history = builder_mock.get_history()
+  inspect(history[0].0, content="Task B independent")
+  inspect(history[1].0, content="Task A depends on B")
+
+  // Should NOT be stuck
+  assert_true(
+    not(infos.iter().any(fn(msg) { msg.contains("DAG execution stuck") })),
+  )
+}
+
+///|
+test "run_dag cycle revert uses inserted_scope_edges not scope_edges to preserve explicit deps" {
+  let config = make_ralph_config()
+  // A depends on B explicitly. B depends on C explicitly. A and C share scope "shared.ts".
+  // Scope edge candidate: A→C (C depends on A) — but A already has explicit dep on B,
+  // not on C, so scope edge A→C IS inserted.
+  // Scope edge candidate: (none from C→A direction since A appears before C in task list)
+  //
+  // Revised scenario to trigger the bug:
+  // B depends on A explicitly. A and B share scope "shared.ts".
+  // Scope candidates: chain A→B (B depends on A). But B already has explicit dep on A,
+  // so apply_scope_edges skips it → inserted_scope_edges is empty.
+  // C depends on B explicitly. C and A share scope "other.ts".
+  // Scope candidates: chain A→C (C depends on A). This IS inserted since C has no dep on A.
+  // Now A→B (explicit), A→C (scope-inserted), B→C (explicit) — no cycle. Good.
+  //
+  // To test the bug: we need scope_edges to contain an edge that duplicates an explicit dep,
+  // AND a cycle caused by a different scope edge on the same task.
+  // Task A: depends_on=[B], scope=[shared.ts]
+  // Task B: depends_on=[],  scope=[shared.ts, other.ts]
+  // Task C: depends_on=[],  scope=[other.ts]
+  // Scope edges from shared.ts: A→B (A before B → B depends on A). But B has no explicit dep
+  //   on A, so this IS inserted. Now B depends on A (scope) and A depends on B (explicit) → cycle!
+  // Scope edges from other.ts: B→C (B before C → C depends on B). This IS inserted.
+  //
+  // With the fix, revert iterates inserted_scope_edges = [(A,B), (B,C)].
+  // Cycle tasks include A and B. Revert removes scope edge (A,B) from B's depends_on.
+  // A's explicit dep on B is preserved.
+  //
+  // Without the fix (using scope_edges which equals inserted here), same result.
+  // Need a scenario where scope_edges != inserted_scope_edges AND the difference matters.
+  //
+  // Correct scenario:
+  // Task A: depends_on=[B], scope=[shared.ts]   ← explicit dep A→B
+  // Task B: depends_on=[],  scope=[shared.ts]
+  // Scope chain for shared.ts: [A, B] → edge (A, B) meaning B depends on A.
+  // apply_scope_edges: B.depends_on does not contain A → inserts (A,B). Now B.depends_on=[A].
+  // Now: A depends on B (explicit), B depends on A (scope) → CYCLE on {A,B}.
+  // scope_edges = [(A,B)], inserted_scope_edges = [(A,B)] — same here, no difference.
+  //
+  // We need: explicit dep that COINCIDES with a scope edge direction.
+  // Task A: depends_on=[B], scope=[shared.ts]   ← A depends on B
+  // Task B: depends_on=[],  scope=[shared.ts, conflict.ts]
+  // Task C: depends_on=[B], scope=[conflict.ts] ← C depends on B
+  // Scope chain shared.ts: [A, B] → (A,B): B depends on A. Inserted (B has no dep on A).
+  // Scope chain conflict.ts: [B, C] → (B,C): C depends on B. C already has dep on B → SKIPPED.
+  // scope_edges = [(A,B), (B,C)], inserted_scope_edges = [(A,B)]
+  // Cycle: A→B (explicit) + B→A (scope-inserted) → {A,B} in cycle.
+  // BUG (old code): revert iterates scope_edges, finds (B,C) with to_id=C.
+  //   C is NOT in cycle_set → no harm. Still safe in this case.
+  //
+  // Real bug scenario: the scope edge candidate coincides with an explicit dep ON a cycle task.
+  // Task A: depends_on=[],  scope=[shared.ts]
+  // Task B: depends_on=[A], scope=[shared.ts, conflict.ts] ← B depends on A (explicit)
+  // Task C: depends_on=[B], scope=[conflict.ts]             ← C depends on B (explicit)
+  // Scope chain shared.ts: [A, B] → (A,B): B depends on A. B already has A → SKIPPED.
+  // Scope chain conflict.ts: [B, C] → (B,C): C depends on B. C already has B → SKIPPED.
+  // scope_edges = [(A,B), (B,C)], inserted = [] — no cycle, no revert. Not useful.
+  //
+  // The real scenario: explicit dep creates reverse direction + scope creates forward.
+  // Task B: depends_on=[A], scope=[x.ts]  ← B→A explicit
+  // Task A: depends_on=[],  scope=[x.ts]  ← A is first in array
+  // Scope chain for x.ts: [B, A] (task order in array) → (B,A): A depends on B. INSERTED.
+  // Now: B depends on A (explicit) AND A depends on B (scope) → cycle {A,B}.
+  // scope_edges = [(B,A)], inserted = [(B,A)] — still same.
+  //
+  // The ONLY way to trigger the bug: a scope edge candidate that is NOT inserted (because
+  // the explicit dep already exists), but scope_edges still contains it, and the to_id
+  // is a cycle task. Then revert using scope_edges would try to remove the explicit dep.
+  //
+  // Final correct scenario:
+  // Task A: depends_on=[B], scope=[x.ts, y.ts]  ← A depends on B (explicit)
+  // Task B: depends_on=[],  scope=[x.ts]
+  // Task C: depends_on=[A], scope=[y.ts]         ← C depends on A (explicit), creates cycle
+  // Task order: [B, A, C] — scope x.ts chain: [B,A] → edge (B,A) meaning A depends on B.
+  //   A already has dep on B → SKIPPED by apply_scope_edges.
+  // Scope y.ts chain: [A, C] → edge (A,C) meaning C depends on A.
+  //   C already has dep on A → SKIPPED.
+  // scope_edges = [(B,A), (A,C)], inserted = []. No cycle from scope. Not useful.
+  //
+  // OK let me think about this differently. The scenario needs:
+  // 1. An actual cycle exists (from mix of explicit + scope-inserted edges)
+  // 2. scope_edges contains an edge that was NOT inserted (duplicate of explicit)
+  // 3. That non-inserted edge's to_id is a cycle task
+  //
+  // Task A: scope=[shared.ts], depends_on=[C]   ← creates a cycle with scope
+  // Task B: scope=[shared.ts], depends_on=[]
+  // Task C: scope=[], depends_on=[B]            ← explicit dep on B
+  //
+  // Scope chain shared.ts: [A, B] → edge (A,B): B depends on A. B has no dep on A → INSERTED.
+  // scope_edges = [(A,B)], inserted = [(A,B)]. Same — no difference.
+  //
+  // Need scope edge that matches an existing explicit dep:
+  // Task A: scope=[shared.ts], depends_on=[B]  ← explicit dep A→B AND scope will also say B→A
+  // Task B: scope=[shared.ts], depends_on=[]
+  // Scope chain: [A, B] → (A,B): B depends on A. Inserted. → cycle.
+  // scope_edges = [(A,B)]. inserted = [(A,B)]. Same.
+  //
+  // The duplicate happens when the scope chain direction matches the explicit dep direction:
+  // Task A: scope=[shared.ts], depends_on=[]
+  // Task B: scope=[shared.ts], depends_on=[A]   ← explicit B→A
+  // Scope chain: [A, B] → (A,B): B depends on A. B already has A → SKIPPED.
+  // scope_edges=[(A,B)], inserted=[]. No cycle. Not useful.
+  //
+  // Need a THIRD task to create the cycle via a different path:
+  // Task A: scope=[shared.ts], depends_on=[C]  ← explicit A→C
+  // Task B: scope=[shared.ts], depends_on=[A]  ← explicit B→A (coincides with scope direction)
+  // Task C: scope=[], depends_on=[]
+  //
+  // Scope chain shared.ts: [A, B] → (A,B): B depends on A. B already has A → SKIPPED.
+  // scope_edges=[(A,B)], inserted=[]. No scope-caused cycle. Not useful.
+  //
+  // Try: scope edge in opposite direction causes cycle, AND another scope edge coincides with explicit.
+  // Task A: scope=[f1.ts, f2.ts], depends_on=[B]   ← explicit A→B
+  // Task B: scope=[f1.ts], depends_on=[]
+  // Task C: scope=[f2.ts], depends_on=[]
+  //
+  // Scope f1.ts: [A, B] → (A,B): B depends on A. INSERTED. → A→B + B→A = cycle!
+  // Scope f2.ts: [A, C] → (A,C): C depends on A. INSERTED.
+  // scope_edges = [(A,B), (A,C)], inserted = [(A,B), (A,C)]. Same! Because the explicit
+  // dep is A→B (A depends on B), but scope edge is (A,B) meaning B depends on A — different direction!
+  //
+  // Hmm, let me reconsider. The edge tuple (from, to) means to depends on from.
+  // So (A,B) means B depends on A. The explicit A.depends_on=[B] means A depends on B.
+  // These are different directions! So scope (A,B) won't be skipped by apply_scope_edges
+  // checking B.depends_on.contains(A).
+  //
+  // For the scope edge to be skipped (duplicating explicit), we need:
+  //   scope edge (X, Y) meaning Y depends on X, AND Y.depends_on already contains X.
+  //
+  // So: Task X first, Task Y second in shared scope, Y.depends_on=[X].
+  // Let's build the real bug scenario:
+  //
+  // Tasks in order: [A, B, C]
+  // A: scope=[s.ts], depends_on=[]
+  // B: scope=[s.ts, t.ts], depends_on=[A]   ← B depends on A (explicit) = same as scope(A,B)
+  // C: scope=[t.ts], depends_on=[B]         ← C depends on B (explicit) = same as scope(B,C)
+  //
+  // Scope s.ts chain: [A, B] → (A,B): B depends on A. B already has A → SKIPPED.
+  // Scope t.ts chain: [B, C] → (B,C): C depends on B. C already has B → SKIPPED.
+  // scope_edges = [(A,B), (B,C)], inserted = []. No new edges, no cycle. Not the bug.
+  //
+  // Now add a cycle-creating explicit dep:
+  // A: scope=[s.ts], depends_on=[C]          ← A depends on C (explicit) → cycle A→C→B→A
+  // B: scope=[s.ts, t.ts], depends_on=[A]    ← explicit, coincides with scope direction
+  // C: scope=[t.ts], depends_on=[B]          ← explicit, coincides with scope direction
+  //
+  // Scope s.ts: [A, B] → (A,B): B depends on A. B already has A → SKIPPED.
+  // Scope t.ts: [B, C] → (B,C): C depends on B. C already has B → SKIPPED.
+  // scope_edges = [(A,B), (B,C)], inserted = [].
+  // Cycle exists (A→C→B→A from explicits alone). But inserted is empty, so revert block is skipped.
+  //
+  // OK the guard at L323 `if not(inserted_scope_edges.is_empty())` would skip the entire block.
+  // With the old code using scope_edges, the guard checks inserted_scope_edges (still empty) → skip.
+  // So this scenario doesn't trigger the bug either.
+  //
+  // Let me re-read the code more carefully...
+  // L323: `if not(inserted_scope_edges.is_empty())` — this is the GUARD.
+  // L330: `for edge in scope_edges` — this is the BUG (now fixed to inserted_scope_edges).
+  //
+  // For the bug to manifest:
+  // 1. inserted_scope_edges must be NON-EMPTY (to pass the guard at L323)
+  // 2. scope_edges must contain additional edges NOT in inserted_scope_edges
+  // 3. Those extra edges' to_id must be a cycle task
+  // 4. The removal of those extra edges from depends_on must delete an explicit dep
+  //
+  // So we need: at least one scope edge that IS inserted (non-empty inserted),
+  // AND at least one scope edge that is NOT inserted (matches explicit dep),
+  // AND that non-inserted edge's to_id is in a cycle.
+  //
+  // Tasks: [A, B, C]
+  // A: scope=[s.ts, t.ts], depends_on=[B]    ← A depends on B explicitly
+  // B: scope=[s.ts], depends_on=[]
+  // C: scope=[t.ts], depends_on=[]
+  //
+  // Scope s.ts: [A, B] → (A,B): B depends on A. B has no A → INSERTED.
+  //   Now B.depends_on = [A]. Combined with A.depends_on=[B] → cycle {A,B}!
+  // Scope t.ts: [A, C] → (A,C): C depends on A. C has no A → INSERTED.
+  //
+  // scope_edges = [(A,B), (A,C)], inserted = [(A,B), (A,C)]. Same! Both inserted.
+  // This doesn't demonstrate the bug since scope_edges == inserted_scope_edges.
+  //
+  // I need a scope edge that is skipped because it duplicates an explicit dep.
+  // That means: a task Y with explicit depends_on containing X, and both X,Y share a scope file
+  // with X appearing before Y in the task array.
+  //
+  // Tasks: [A, B, C]
+  // A: scope=[s.ts],     depends_on=[]
+  // B: scope=[s.ts, t.ts], depends_on=[A]   ← B.depends_on has A → scope (A,B) will be SKIPPED
+  // C: scope=[t.ts],     depends_on=[B]     ← C.depends_on has B → scope (B,C) will be SKIPPED
+  //
+  // All scope edges are skipped → inserted=[]. Guard fails. Can't trigger.
+  //
+  // Need mix: one inserted, one skipped, both on cycle tasks.
+  // Tasks: [A, B, C]
+  // A: scope=[s.ts, t.ts], depends_on=[]
+  // B: scope=[s.ts],       depends_on=[A]   ← scope (A,B) SKIPPED (B already has A)
+  // C: scope=[t.ts],       depends_on=[A]   ← scope (A,C) SKIPPED (C already has A)
+  //
+  // All skipped again. Hmm.
+  //
+  // The trick: we need one scope file where the edge IS novel (inserted), and another
+  // scope file where the edge coincides with an explicit dep (skipped).
+  //
+  // Tasks: [A, B, C]
+  // A: scope=[conflict.ts], depends_on=[B]     ← explicit A→B
+  // B: scope=[conflict.ts, shared.ts], depends_on=[]
+  // C: scope=[shared.ts], depends_on=[]
+  //
+  // Scope conflict.ts: [A, B] → (A,B): B depends on A. B has no A → INSERTED. Cycle: A→B + B→A!
+  // Scope shared.ts: [B, C] → (B,C): C depends on B. C has no B → INSERTED.
+  // scope_edges = [(A,B), (B,C)], inserted = [(A,B), (B,C)]. Same again!
+  //
+  // The explicit dep A.depends_on=[B] means A depends on B. The scope edge (A,B) means
+  // B depends on A. These are OPPOSITE directions, so apply_scope_edges checks
+  // B.depends_on.contains(A) which is false → inserts it.
+  //
+  // For a scope edge to be SKIPPED, the scope edge direction must MATCH the explicit dep:
+  // scope (X,Y) means Y.depends_on should get X. If Y.depends_on already has X → skipped.
+  //
+  // So we need: task X before task Y in array, both share a file, Y already has X in depends_on.
+  // AND we need X or Y to be in a cycle caused by OTHER inserted scope edges.
+  //
+  // Tasks: [A, B, C, D]
+  // A: scope=[f1.ts], depends_on=[C]           ← explicit A→C
+  // B: scope=[f1.ts, f2.ts], depends_on=[A]    ← explicit B→A, scope f1 (A,B) → B.dep on A: SKIPPED
+  // C: scope=[f2.ts], depends_on=[]
+  //
+  // Scope f1.ts: [A, B] → (A,B): B depends on A. B already has A → SKIPPED.
+  // Scope f2.ts: [B, C] → (B,C): C depends on B. C has no B → INSERTED.
+  //
+  // scope_edges = [(A,B), (B,C)], inserted = [(B,C)].
+  // After insertion: C.depends_on = [B].
+  // Chain: A→C (explicit), C→B (scope-inserted), B→A (explicit) → cycle {A,B,C}!
+  //
+  // OLD code (scope_edges): iterates [(A,B), (B,C)].
+  //   (A,B) to_id=B, B is in cycle → scope_deps_to_remove[B] = {A: true}
+  //   (B,C) to_id=C, C is in cycle → scope_deps_to_remove[C] = {B: true}
+  //   Revert: B.depends_on=[A] → removes A → B.depends_on=[] ← BUG! A was explicit!
+  //   Revert: C.depends_on=[B] → removes B → C.depends_on=[] (this is correct, B was scope-inserted)
+  //
+  // NEW code (inserted_scope_edges): iterates [(B,C)].
+  //   (B,C) to_id=C, C is in cycle → scope_deps_to_remove[C] = {B: true}
+  //   Revert: C.depends_on=[B] → removes B → C.depends_on=[]
+  //   B.depends_on=[A] is UNTOUCHED ← CORRECT! A was explicit dep preserved.
+  //
+  // Perfect! This is the test scenario.
+
+  // A→C (explicit), B→A (explicit), scope overlap on f1.ts skips (A,B) since
+  // B already depends on A. Scope overlap on f2.ts inserts (B,C). The cycle
+  // A→C→B→A involves all three tasks. The revert phase must only remove the
+  // scope-inserted edge (B,C), NOT the skipped-but-candidate (A,B) which would
+  // incorrectly strip B's explicit dep on A.
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Revert test", "status": "pending",
+    #|      "tasks": [
+    #|        {
+    #|          "id": "m1-t1",
+    #|          "description": "Task A",
+    #|          "wave": 0,
+    #|          "scope": ["f1.ts"],
+    #|          "depends_on": ["m1-t3"],
+    #|          "status": "pending"
+    #|        },
+    #|        {
+    #|          "id": "m1-t2",
+    #|          "description": "Task B",
+    #|          "wave": 0,
+    #|          "scope": ["f1.ts", "f2.ts"],
+    #|          "depends_on": ["m1-t1"],
+    #|          "status": "pending"
+    #|        },
+    #|        {
+    #|          "id": "m1-t3",
+    #|          "description": "Task C",
+    #|          "wave": 0,
+    #|          "scope": ["f2.ts"],
+    #|          "depends_on": [],
+    #|          "status": "pending"
+    #|        }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  let tasks = mgr.milestones[0].tasks
+
+  // B's explicit dep on A must be preserved (not stripped by revert)
+  assert_true(tasks[1].depends_on.contains("m1-t1"))
+
+  // Scope-inserted edge (B,C) on C should have been reverted
+  assert_true(not(tasks[2].depends_on.contains("m1-t2")))
+
+  // Cycle was detected
+  assert_true(infos.iter().any(fn(msg) { msg.contains("Cycle detected") }))
+
+  // Scope edges were reverted
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) { msg.contains("Reverted") && msg.contains("scope edges") }),
+  )
+
+  // All tasks should complete (cycle broken, execution proceeds)
+  inspect(mgr.milestones[0].status, content="Done")
+  for task in tasks {
+    inspect(task.status, content="Done")
+  }
 }
 
 ///|
@@ -767,16 +1184,16 @@ test "resume skips already-done milestones" {
     not(infos.iter().any(fn(msg) { msg.contains("Planning milestone: m1") })),
   )
   assert_true(
-    not(infos.iter().any(fn(msg) { msg.contains("Executing wave 0 of m1") })),
+    not(infos.iter().any(fn(msg) { msg.contains("Executing DAG for m1") })),
   )
   assert_true(
     not(infos.iter().any(fn(msg) { msg.contains("Resuming milestone m1:") })),
   )
   assert_true(
-    not(infos.iter().any(fn(msg) { msg.contains("Running task m1-t1") })),
+    not(infos.iter().any(fn(msg) { msg.contains("Dispatching task m1-t1") })),
   )
   assert_true(
-    infos.iter().any(fn(msg) { msg.contains("Executing wave 0 of m2") }),
+    infos.iter().any(fn(msg) { msg.contains("Executing DAG for m2") }),
   )
 }
 
@@ -984,10 +1401,9 @@ test "RalphLoop multi-wave execution" {
   let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
   rl.run()
   inspect(mgr.milestones[0].status, content="Done")
-  // Should execute wave 0 and wave 1
-  assert_true(infos.iter().any(fn(m) { m.contains("Executing wave 0") }))
-  assert_true(infos.iter().any(fn(m) { m.contains("Executing wave 1") }))
-  // Builder should have been called 3 times (1 in wave 0 + 2 in wave 1)
+  // Should execute DAG (layers computed from wave-based parse)
+  assert_true(infos.iter().any(fn(m) { m.contains("Executing DAG for m1") }))
+  // Builder should have been called 3 times (1 in layer 0 + 2 in layer 1)
   assert_true(builder_mock.get_history().length() == 3)
 }
 
@@ -1721,6 +2137,7 @@ test "tornado-1fy: detect_wave_file_conflicts finds overlapping files" {
     id: "m1-t1",
     description: "task 1",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Done,
     result: None,
@@ -1729,6 +2146,7 @@ test "tornado-1fy: detect_wave_file_conflicts finds overlapping files" {
     id: "m1-t2",
     description: "task 2",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Done,
     result: None,
@@ -1750,6 +2168,7 @@ test "tornado-1fy: detect_wave_file_conflicts returns empty for no overlaps" {
     id: "m1-t1",
     description: "task 1",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Done,
     result: None,
@@ -1758,6 +2177,7 @@ test "tornado-1fy: detect_wave_file_conflicts returns empty for no overlaps" {
     id: "m1-t2",
     description: "task 2",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Done,
     result: None,
@@ -1775,6 +2195,7 @@ test "detect_scope_overlaps finds overlapping scoped files" {
     id: "m1-t1",
     description: "task 1",
     scope: ["src/shared.ts", "src/a.ts"],
+    depends_on: [],
     wave: 0,
     status: Pending,
     result: None,
@@ -1783,6 +2204,7 @@ test "detect_scope_overlaps finds overlapping scoped files" {
     id: "m1-t2",
     description: "task 2",
     scope: ["src/shared.ts", "src/b.ts"],
+    depends_on: [],
     wave: 0,
     status: Pending,
     result: None,
@@ -1805,6 +2227,7 @@ test "detect_scope_overlaps returns empty for no overlaps" {
     id: "m1-t1",
     description: "task 1",
     scope: ["src/a.ts"],
+    depends_on: [],
     wave: 0,
     status: Pending,
     result: None,
@@ -1813,6 +2236,7 @@ test "detect_scope_overlaps returns empty for no overlaps" {
     id: "m1-t2",
     description: "task 2",
     scope: ["src/b.ts"],
+    depends_on: [],
     wave: 0,
     status: Pending,
     result: None,
@@ -1830,6 +2254,7 @@ test "detect_scope_overlaps skips tasks with empty scope" {
     id: "m1-t1",
     description: "task 1",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Pending,
     result: None,
@@ -1838,6 +2263,7 @@ test "detect_scope_overlaps skips tasks with empty scope" {
     id: "m1-t2",
     description: "task 2",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Pending,
     result: None,
@@ -2131,7 +2557,7 @@ test "validate_builder_result fails on partial file missing (whirlwind-aps)" {
 }
 
 ///|
-test "next_wave_number skips completed waves and jumps to pending wave" {
+test "run_dag skips already-done layers and dispatches only pending tasks" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -2168,13 +2594,16 @@ test "next_wave_number skips completed waves and jumps to pending wave" {
   }
   let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
   rl.run()
-  // Wave 0 should never be executed (all tasks done, next_wave_number skips it)
+  // DAG should be executed (layer 0 tasks already done, only layer 1 dispatched)
   assert_true(
-    not(infos.iter().any(fn(msg) { msg.contains("Executing wave 0") })),
+    infos.iter().any(fn(msg) { msg.contains("Executing DAG for m1") }),
   )
-  // Wave 1 should be executed
-  assert_true(infos.iter().any(fn(msg) { msg.contains("Executing wave 1") }))
-  // Builder should only be called for wave 1's pending task
+  // Layer 0 has only done tasks → silently skipped (no pending to dispatch)
+  // Layer 1's pending task is dispatched
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("Dispatching task m1-t3") }),
+  )
+  // Builder should only be called for the pending task
   let history = builder_mock.get_history()
   assert_true(history.length() == 1)
   inspect(history[0].0, content="Add handlers")
@@ -2183,7 +2612,90 @@ test "next_wave_number skips completed waves and jumps to pending wave" {
 }
 
 ///|
-test "run_wave returns false when no builder backend is available" {
+test "run_dag resumes with depends_on: done task propagates and unblocks pending dependents" {
+  let config = make_ralph_config()
+  // DAG: A (done) → B (pending), A → C (pending), independent D (done)
+  // On resume, A and D are skipped; B and C are unblocked by A's done propagation.
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Resume DAG", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Schema (done)", "wave": 0, "status": "done", "result": "schema ok", "depends_on": [] },
+    #|        { "id": "m1-t2", "description": "Handlers (pending)", "wave": 0, "status": "pending", "depends_on": ["m1-t1"] },
+    #|        { "id": "m1-t3", "description": "Auth (pending)", "wave": 0, "status": "pending", "depends_on": ["m1-t1"] },
+    #|        { "id": "m1-t4", "description": "Docs (done)", "wave": 0, "status": "done", "result": "docs ok", "depends_on": [] }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="fresh result")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  let tasks = mgr.milestones[0].tasks
+
+  // All tasks should be Done
+  for task in tasks {
+    inspect(task.status, content="Done")
+  }
+
+  // Done tasks preserve their original results
+  inspect(tasks[0].result.unwrap(), content="schema ok")
+  inspect(tasks[3].result.unwrap(), content="docs ok")
+
+  // Pending tasks got fresh results from builder
+  inspect(tasks[1].result.unwrap(), content="fresh result")
+  inspect(tasks[2].result.unwrap(), content="fresh result")
+
+  // Builder only called for the 2 pending tasks (not the 2 done ones)
+  let history = builder_mock.get_history()
+  assert_true(history.length() == 2)
+
+  // Skip log emitted for the 2 already-done tasks
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("Skipping 2 already-done tasks") }),
+  )
+
+  // Only pending tasks were dispatched
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) { msg.contains("Dispatching task") })
+    .collect()
+  assert_true(dispatch_msgs.length() == 2)
+  // Done tasks must NOT appear in dispatch logs
+  assert_true(not(dispatch_msgs.iter().any(fn(msg) { msg.contains("m1-t1") })))
+  assert_true(not(dispatch_msgs.iter().any(fn(msg) { msg.contains("m1-t4") })))
+  // Pending tasks must appear in dispatch logs
+  assert_true(dispatch_msgs.iter().any(fn(msg) { msg.contains("m1-t2") }))
+  assert_true(dispatch_msgs.iter().any(fn(msg) { msg.contains("m1-t3") }))
+
+  // Milestone completes
+  inspect(mgr.milestones[0].status, content="Done")
+}
+
+///|
+test "run_dag returns false when no builder backend is available" {
   // Config has no Builder agent
   let planner_agent : @types.AgentConfig = {
     id: "planner",
@@ -2310,6 +2822,7 @@ test "detect_wave_file_conflicts with 3 tasks all sharing the same file" {
     id: "m1-t1",
     description: "task 1",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Done,
     result: None,
@@ -2318,6 +2831,7 @@ test "detect_wave_file_conflicts with 3 tasks all sharing the same file" {
     id: "m1-t2",
     description: "task 2",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Done,
     result: None,
@@ -2326,6 +2840,7 @@ test "detect_wave_file_conflicts with 3 tasks all sharing the same file" {
     id: "m1-t3",
     description: "task 3",
     scope: [],
+    depends_on: [],
     wave: 0,
     status: Done,
     result: None,
@@ -2683,4 +3198,773 @@ test "whirlwind-d35: rework prompt includes scope limitation" {
   assert_true(rework_system_prompt.contains("scope"))
   assert_true(rework_system_prompt.contains("Do not restructure"))
   assert_true(rework_system_prompt.contains("minimal"))
+}
+
+///|
+test "E2E DAG: planner outputs DEPENDS_ON format and DAG dispatches in correct layer order" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Build API with auth", "status": "pending", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  // Planner outputs DEPENDS_ON format: 4 tasks with diamond dependency
+  //   1 (schema) → 2 (handlers), 3 (auth) → 4 (integration tests)
+  let plan_output =
+    #|TASKS:
+    #|1. Create database schema
+    #|SCOPE: src/schema.mbt
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Build API handlers
+    #|SCOPE: src/api.mbt
+    #|DEPENDS_ON: 1
+    #|
+    #|3. Add authentication middleware
+    #|SCOPE: src/auth.mbt
+    #|DEPENDS_ON: 1
+    #|
+    #|4. Write integration tests
+    #|SCOPE: tests/integration.mbt
+    #|DEPENDS_ON: 2, 3
+  let planner_mock = @agent.MockBackend::new(default_response=plan_output)
+  let builder_mock = @agent.MockBackend::new(default_response="fallback")
+  builder_mock.add_response("schema", "schema done")
+  builder_mock.add_response("handlers", "handlers done")
+  builder_mock.add_response("authentication", "auth done")
+  builder_mock.add_response("integration", "tests done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  // Milestone should complete successfully
+  inspect(mgr.milestones[0].status, content="Done")
+  inspect(rl.current_phase, content="AllComplete")
+
+  // Verify 4 tasks were created with correct depends_on
+  let tasks = mgr.milestones[0].tasks
+  assert_true(tasks.length() == 4)
+  inspect(tasks[0].description, content="Create database schema")
+  assert_true(tasks[0].depends_on.is_empty())
+  inspect(tasks[1].description, content="Build API handlers")
+  assert_true(tasks[1].depends_on.length() == 1)
+  assert_true(tasks[1].depends_on[0] == tasks[0].id)
+  inspect(tasks[2].description, content="Add authentication middleware")
+  assert_true(tasks[2].depends_on.length() == 1)
+  assert_true(tasks[2].depends_on[0] == tasks[0].id)
+  inspect(tasks[3].description, content="Write integration tests")
+  assert_true(tasks[3].depends_on.length() == 2)
+  assert_true(tasks[3].depends_on[0] == tasks[1].id)
+  assert_true(tasks[3].depends_on[1] == tasks[2].id)
+
+  // Verify DAG was executed
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("Executing DAG for m1") }),
+  )
+
+  // Verify dispatch logs: task 1 dispatched first (layer 0),
+  // then tasks 2 and 3 (layer 1), then task 4 (layer 2)
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("Dispatching task") && msg.contains(tasks[0].id)
+    }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("Dispatching task") && msg.contains(tasks[1].id)
+    }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("Dispatching task") && msg.contains(tasks[2].id)
+    }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("Dispatching task") && msg.contains(tasks[3].id)
+    }),
+  )
+
+  // Builder was called 4 times
+  assert_true(builder_mock.get_history().length() == 4)
+
+  // All tasks should be done
+  for task in tasks {
+    inspect(task.status, content="Done")
+  }
+
+  // Verify scope was parsed correctly
+  assert_true(tasks[0].scope.length() == 1)
+  assert_true(tasks[0].scope[0] == "src/schema.mbt")
+  assert_true(tasks[3].scope.length() == 1)
+  assert_true(tasks[3].scope[0] == "tests/integration.mbt")
+}
+
+///|
+test "E2E DAG: planner outputs DEPENDS_ON format with max_in_flight=2 batches dispatches" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Build features", "status": "pending", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  // 3 independent tasks (all layer 0), should be batched by max_in_flight=2
+  let plan_output =
+    #|TASKS:
+    #|1. Create module A
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Create module B
+    #|DEPENDS_ON: (none)
+    #|
+    #|3. Create module C
+    #|DEPENDS_ON: (none)
+  let planner_mock = @agent.MockBackend::new(default_response=plan_output)
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(
+    config,
+    mgr,
+    backends,
+    callbacks,
+    max_in_flight=2,
+  )
+  rl.run()
+
+  inspect(mgr.milestones[0].status, content="Done")
+  assert_true(builder_mock.get_history().length() == 3)
+
+  // max_in_flight=2: slot-refilling dispatch — after executing one task,
+  // the dispatch phase immediately refills open slots before executing the next.
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) {
+      msg.contains("Dispatching task") && msg.contains("in_flight:")
+    })
+    .collect()
+  assert_true(dispatch_msgs.length() == 3)
+  // Initial dispatch: fills 2 slots (A at 1/2, B at 2/2)
+  assert_true(dispatch_msgs[0].contains("in_flight: 1/2"))
+  assert_true(dispatch_msgs[1].contains("in_flight: 2/2"))
+  // After A completes (in_flight drops to 1), C refills the open slot (2/2)
+  assert_true(dispatch_msgs[2].contains("in_flight: 2/2"))
+}
+
+///|
+test "E2E DAG: max_in_flight=2 mid-batch ready resolution dispatches dependent immediately" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Build with deps", "status": "pending", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  // DAG with dependencies:
+  //   A (no deps) → C (deps: A)
+  //   B (no deps) → D (deps: B)
+  // With max_in_flight=2: A,B dispatch first, then as each completes
+  // its dependent is immediately dispatched (slot-refilling).
+  let plan_output =
+    #|TASKS:
+    #|1. Create module A
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Create module B
+    #|DEPENDS_ON: (none)
+    #|
+    #|3. Create module C
+    #|DEPENDS_ON: 1
+    #|
+    #|4. Create module D
+    #|DEPENDS_ON: 2
+  let planner_mock = @agent.MockBackend::new(default_response=plan_output)
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(
+    config,
+    mgr,
+    backends,
+    callbacks,
+    max_in_flight=2,
+  )
+  rl.run()
+
+  inspect(mgr.milestones[0].status, content="Done")
+  let tasks = mgr.milestones[0].tasks
+  assert_true(tasks.length() == 4)
+  for task in tasks {
+    inspect(task.status, content="Done")
+  }
+  assert_true(builder_mock.get_history().length() == 4)
+
+  // Collect dispatch and completion messages in order
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) {
+      msg.contains("Dispatching task") && msg.contains("in_flight:")
+    })
+    .collect()
+  let complete_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) { msg.contains("completed") })
+    .collect()
+
+  // 4 dispatches and 4 completions
+  assert_true(dispatch_msgs.length() == 4)
+  assert_true(complete_msgs.length() == 4)
+
+  // Initial dispatch: A at 1/2, B at 2/2 (both layer 0, no deps)
+  assert_true(dispatch_msgs[0].contains(tasks[0].id))
+  assert_true(dispatch_msgs[0].contains("in_flight: 1/2"))
+  assert_true(dispatch_msgs[1].contains(tasks[1].id))
+  assert_true(dispatch_msgs[1].contains("in_flight: 2/2"))
+
+  // Mid-batch ready resolution: C dispatched at 2/2 (after A completes,
+  // slot refilled — C was NOT ready at start, only became ready mid-batch)
+  assert_true(dispatch_msgs[2].contains(tasks[2].id))
+  assert_true(dispatch_msgs[2].contains("in_flight: 2/2"))
+
+  // Mid-batch ready resolution: D dispatched at 2/2 (after B completes)
+  assert_true(dispatch_msgs[3].contains(tasks[3].id))
+  assert_true(dispatch_msgs[3].contains("in_flight: 2/2"))
+
+  // Find log indices for interleaving verification
+  let mut a_complete_idx = -1
+  let mut b_complete_idx = -1
+  let mut c_dispatch_idx = -1
+  let mut d_dispatch_idx = -1
+  for i, msg in infos {
+    if msg.contains("Task") &&
+      msg.contains(tasks[0].id) &&
+      msg.contains("completed") {
+      a_complete_idx = i
+    }
+    if msg.contains("Task") &&
+      msg.contains(tasks[1].id) &&
+      msg.contains("completed") {
+      b_complete_idx = i
+    }
+    if msg.contains("Dispatching task") && msg.contains(tasks[2].id) {
+      c_dispatch_idx = i
+    }
+    if msg.contains("Dispatching task") && msg.contains(tasks[3].id) {
+      d_dispatch_idx = i
+    }
+  }
+  // All events must have been found
+  assert_true(a_complete_idx >= 0)
+  assert_true(b_complete_idx >= 0)
+  assert_true(c_dispatch_idx >= 0)
+  assert_true(d_dispatch_idx >= 0)
+
+  // A must complete before C can be dispatched (C depends on A)
+  assert_true(a_complete_idx < c_dispatch_idx)
+  // B must complete before D can be dispatched (D depends on B)
+  assert_true(b_complete_idx < d_dispatch_idx)
+
+  // Key assertion: C is dispatched BEFORE B completes — proving mid-batch
+  // slot-refilling (C was ready after A, not waiting for entire batch)
+  assert_true(c_dispatch_idx < b_complete_idx)
+}
+
+///|
+test "E2E DAG: cascade_fail propagates failure to transitive dependents via explicit deps" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Build chain", "status": "pending", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  // DAG: A → B → C, A → D
+  // A fails → B, D cascade-failed (direct), C cascade-failed (transitive via B)
+  let plan_output =
+    #|TASKS:
+    #|1. Task A root
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Task B child
+    #|DEPENDS_ON: 1
+    #|
+    #|3. Task C grandchild
+    #|DEPENDS_ON: 2
+    #|
+    #|4. Task D sibling
+    #|DEPENDS_ON: 1
+  let planner_mock = @agent.MockBackend::new(default_response=plan_output)
+  // Builder always fails — A is the only task dispatched, so it fails
+  let builder_mock = @agent.FailingMockBackend::new(error_msg="build error")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  let tasks = mgr.milestones[0].tasks
+  assert_true(tasks.length() == 4)
+
+  // A: direct failure from builder
+  assert_true(tasks[0].status is Failed(_))
+
+  // B: cascade-failed (direct dependent of A)
+  assert_true(tasks[1].status is Failed(_))
+
+  // C: cascade-failed (transitive: depends on B which depends on A)
+  assert_true(tasks[2].status is Failed(_))
+
+  // D: cascade-failed (direct dependent of A)
+  assert_true(tasks[3].status is Failed(_))
+
+  // Only task A was dispatched to builder (others were cascade-failed before dispatch)
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) { msg.contains("Dispatching task") })
+    .collect()
+  assert_true(dispatch_msgs.length() == 1)
+  assert_true(dispatch_msgs[0].contains(tasks[0].id))
+
+  // Verify cascade-fail log messages for B, C, D
+  let cascade_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) { msg.contains("cascade-failed") })
+    .collect()
+  assert_true(cascade_msgs.length() == 3)
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains(tasks[1].id) &&
+      msg.contains("cascade-failed") &&
+      msg.contains(tasks[0].id)
+    }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains(tasks[2].id) &&
+      msg.contains("cascade-failed") &&
+      msg.contains(tasks[0].id)
+    }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains(tasks[3].id) &&
+      msg.contains("cascade-failed") &&
+      msg.contains(tasks[0].id)
+    }),
+  )
+
+  // DAG execution failed
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("DAG execution failed") }),
+  )
+}
+
+///|
+test "E2E DAG: cascade_fail propagates failure through wave barriers" {
+  let config = make_ralph_config()
+  // Pre-existing WAVE tasks: A in wave 0, B and C in wave 1
+  // Wave barriers create implicit deps: wave 0 → wave 1
+  // If A fails, B and C should be cascade-failed via wave barrier
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build with waves", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Wave0 root task", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Wave1 child task", "wave": 1, "status": "pending" },
+    #|        { "id": "m1-t3", "description": "Wave1 sibling task", "wave": 1, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  // Builder always fails — wave 0 task fails
+  let builder_mock = @agent.FailingMockBackend::new(
+    error_msg="wave build error",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  let tasks = mgr.milestones[0].tasks
+  assert_true(tasks.length() == 3)
+
+  // Wave 0 task: direct failure from builder
+  assert_true(tasks[0].status is Failed(_))
+
+  // Wave 1 tasks: cascade-failed via wave barrier
+  assert_true(tasks[1].status is Failed(_))
+  assert_true(tasks[2].status is Failed(_))
+
+  // Only wave 0 task was dispatched
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) { msg.contains("Dispatching task") })
+    .collect()
+  assert_true(dispatch_msgs.length() == 1)
+  assert_true(dispatch_msgs[0].contains("m1-t1"))
+
+  // Wave barriers were applied (confirming barrier path is active)
+  assert_true(infos.iter().any(fn(msg) { msg.contains("wave barriers") }))
+
+  // Cascade-fail messages for wave 1 tasks reference the failed wave 0 task
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("m1-t2") &&
+      msg.contains("cascade-failed") &&
+      msg.contains("m1-t1")
+    }),
+  )
+  assert_true(
+    infos
+    .iter()
+    .any(fn(msg) {
+      msg.contains("m1-t3") &&
+      msg.contains("cascade-failed") &&
+      msg.contains("m1-t1")
+    }),
+  )
+}
+
+///|
+test "E2E backward compat: WAVE format planner output still works with DAG execution" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Build app", "status": "pending", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  // Planner uses legacy WAVE format
+  let planner_mock = @agent.MockBackend::new(
+    default_response="WAVE 0:\n1. Setup database\n\nWAVE 1:\n1. Build handlers\n2. Write tests",
+  )
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  // Milestone should complete successfully
+  inspect(mgr.milestones[0].status, content="Done")
+  inspect(rl.current_phase, content="AllComplete")
+
+  // Tasks parsed correctly: 3 tasks with wave 0 and wave 1
+  let tasks = mgr.milestones[0].tasks
+  assert_true(tasks.length() == 3)
+  inspect(tasks[0].description, content="Setup database")
+  assert_true(tasks[0].wave == 0)
+  inspect(tasks[1].description, content="Build handlers")
+  assert_true(tasks[1].wave == 1)
+  inspect(tasks[2].description, content="Write tests")
+  assert_true(tasks[2].wave == 1)
+
+  // Wave barriers (D2) do NOT modify depends_on — ordering is virtual
+  assert_true(tasks[0].depends_on.is_empty()) // wave 0: no deps
+  assert_true(tasks[1].depends_on.is_empty()) // wave 1: no explicit deps
+  assert_true(tasks[2].depends_on.is_empty()) // wave 1: no explicit deps
+
+  // DAG execution was used
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("Executing DAG for m1") }),
+  )
+  // Wave barriers were applied
+  assert_true(infos.iter().any(fn(msg) { msg.contains("wave barriers") }))
+
+  // All 3 builder calls made
+  assert_true(builder_mock.get_history().length() == 3)
+
+  // Wave ordering preserved: wave 0 task dispatched before wave 1 tasks
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) { msg.contains("Dispatching task") })
+    .collect()
+  assert_true(dispatch_msgs.length() == 3)
+  // First dispatch is wave 0 task
+  assert_true(dispatch_msgs[0].contains(tasks[0].id))
+  // Next dispatches are wave 1 tasks
+  assert_true(dispatch_msgs[1].contains(tasks[1].id))
+  assert_true(dispatch_msgs[2].contains(tasks[2].id))
+
+  // All tasks completed
+  for task in tasks {
+    inspect(task.status, content="Done")
+  }
+}
+
+///|
+test "E2E backward compat: pre-existing WAVE tasks in JSON dispatched via DAG" {
+  let config = make_ralph_config()
+  // Tasks already exist in milestones.json (loaded from disk), using wave-only format
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1", "goal": "Build auth", "status": "pending",
+    #|      "tasks": [
+    #|        { "id": "m1-t1", "description": "Setup schema", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t2", "description": "Create handlers", "wave": 0, "status": "pending" },
+    #|        { "id": "m1-t3", "description": "Add auth layer", "wave": 1, "status": "pending" }
+    #|      ]
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(default_response="unused")
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  // Milestone completes
+  inspect(mgr.milestones[0].status, content="Done")
+
+  // Planner was NOT called (tasks already exist)
+  assert_true(planner_mock.get_history().is_empty())
+
+  // DAG execution was used
+  assert_true(
+    infos.iter().any(fn(msg) { msg.contains("Executing DAG for m1") }),
+  )
+
+  // All 3 builder calls
+  assert_true(builder_mock.get_history().length() == 3)
+
+  // All tasks done
+  for task in mgr.milestones[0].tasks {
+    inspect(task.status, content="Done")
+  }
+
+  // Wave barriers (D2) enforce ordering: wave 1 task dispatched after wave 0 tasks
+  assert_true(infos.iter().any(fn(msg) { msg.contains("wave barriers") }))
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) { msg.contains("Dispatching task") })
+    .collect()
+  assert_true(dispatch_msgs.length() == 3)
+  // First two dispatches are wave 0 tasks
+  assert_true(dispatch_msgs[0].contains("m1-t1"))
+  assert_true(dispatch_msgs[1].contains("m1-t2"))
+  // Third dispatch is wave 1 task (after wave 0 tasks complete)
+  assert_true(dispatch_msgs[2].contains("m1-t3"))
+}
+
+///|
+test "E2E DAG: default max_in_flight=1 dispatches strictly serially" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Serial execution", "status": "pending", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  // 3 independent tasks (all layer 0) — with max_in_flight=1 they must
+  // execute one at a time: dispatch→execute→dispatch→execute→dispatch→execute
+  let plan_output =
+    #|TASKS:
+    #|1. Create module A
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Create module B
+    #|DEPENDS_ON: (none)
+    #|
+    #|3. Create module C
+    #|DEPENDS_ON: (none)
+  let planner_mock = @agent.MockBackend::new(default_response=plan_output)
+  let builder_mock = @agent.MockBackend::new(default_response="Done")
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let infos : Array[String] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => infos.push(ev.message)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  // Default max_in_flight = 1 (omitted to test the default)
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+
+  // All tasks should complete
+  inspect(mgr.milestones[0].status, content="Done")
+  let tasks = mgr.milestones[0].tasks
+  assert_true(tasks.length() == 3)
+  for task in tasks {
+    inspect(task.status, content="Done")
+  }
+  assert_true(builder_mock.get_history().length() == 3)
+
+  // Verify strict serial dispatch: every dispatch log shows in_flight: 1/1
+  let dispatch_msgs : Array[String] = infos
+    .iter()
+    .filter(fn(msg) {
+      msg.contains("Dispatching task") && msg.contains("in_flight:")
+    })
+    .collect()
+  assert_true(dispatch_msgs.length() == 3)
+  // Each dispatch must show exactly 1/1 — never 2/1 or higher
+  for msg in dispatch_msgs {
+    assert_true(msg.contains("in_flight: 1/1"))
+  }
+
+  // Verify interleaving: dispatch and completion alternate strictly
+  // (dispatch A, complete A, dispatch B, complete B, dispatch C, complete C)
+  let events : Array[String] = []
+  for msg in infos {
+    if msg.contains("Dispatching task") {
+      events.push("dispatch")
+    } else if msg.contains("completed") && msg.contains("Task") {
+      events.push("complete")
+    }
+  }
+  // 3 dispatches + 3 completions = 6 events
+  assert_true(events.length() == 6)
+  // Strict alternation: dispatch, complete, dispatch, complete, ...
+  inspect(events[0], content="dispatch")
+  inspect(events[1], content="complete")
+  inspect(events[2], content="dispatch")
+  inspect(events[3], content="complete")
+  inspect(events[4], content="dispatch")
+  inspect(events[5], content="complete")
 }

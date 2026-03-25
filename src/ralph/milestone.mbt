@@ -183,7 +183,24 @@ fn parse_ralph_task(json : Json) -> @types.RalphTask {
       }
     _ => []
   }
-  { id, description, wave, scope, status, result }
+  let depends_on : Array[String] = match json {
+    Object(map) =>
+      match map.get("depends_on") {
+        Some(Array(items)) => {
+          let result : Array[String] = []
+          for item in items {
+            match item {
+              String(s) => result.push(s)
+              _ => ()
+            }
+          }
+          result
+        }
+        _ => []
+      }
+    _ => []
+  }
+  { id, description, wave, scope, depends_on, status, result }
 }
 
 ///|
@@ -240,6 +257,13 @@ fn ralph_task_to_json_value(t : @types.RalphTask) -> Json {
     }
     obj["scope"] = Json::array(scope_arr)
   }
+  if not(t.depends_on.is_empty()) {
+    let deps_arr : Array[Json] = []
+    for dep in t.depends_on {
+      deps_arr.push(dep.to_json())
+    }
+    obj["depends_on"] = Json::array(deps_arr)
+  }
   Json::object(obj)
 }
 
@@ -269,16 +293,17 @@ fn extract_task_num(id : String) -> Int {
 }
 
 ///|
-/// Parse planner text output in WAVE format
+/// Parse planner text output in TASKS/DEPENDS_ON format (with WAVE backward compat)
 fn parse_plan_text(
   mgr : MilestoneManager,
   output : String,
   milestone_id : String,
 ) -> Array[@types.RalphTask] {
   let tasks : Array[@types.RalphTask] = []
+  let start_task_num = mgr.next_task_id
   let mut current_wave = 0
-  let mut saw_wave_header = false
-  let mut found_wave_tasks = false
+  let mut saw_header = false
+  let mut found_tasks = false
   let lines = @util.split_lines(output)
   let mut i = 0
   while i < lines.length() {
@@ -288,49 +313,67 @@ fn parse_plan_text(
       i = i + 1
       continue
     }
-    // Stop at "---" only after we've started parsing actual WAVE tasks.
-    if is_separator(trimmed) && found_wave_tasks {
+    // Stop at "---" only after we've started parsing actual tasks.
+    if is_separator(trimmed) && found_tasks {
       break
     }
-    // Strip markdown formatting before checking wave prefix
+    // Strip markdown formatting before checking headers
     let stripped = strip_markdown_prefix(trimmed)
-    // Check for "WAVE N:" header
+    // Check for "TASKS:" header (DAG mode)
+    if has_tasks_prefix(stripped) {
+      saw_header = true
+      current_wave = 0
+      i = i + 1
+      continue
+    }
+    // Check for "WAVE N:" header (legacy mode)
     if has_wave_prefix(stripped) {
       let num = parse_wave_number(stripped)
       if num >= 0 {
         current_wave = num
-        saw_wave_header = true
+        saw_header = true
       }
       i = i + 1
       continue
     }
-    if not(saw_wave_header) {
+    if not(saw_header) {
       i = i + 1
       continue
     }
     // Check for numbered items: "1. description" or "- description"
     let desc = parse_list_item(trimmed)
     if desc.length() > 0 {
-      found_wave_tasks = true
+      found_tasks = true
       let id = mgr.gen_task_id(milestone_id)
       tasks.push({
         id,
         description: desc,
         wave: current_wave,
         scope: [],
+        depends_on: [],
         status: @types.TaskStatus::Pending,
         result: None,
       })
       i = i + 1
-      if i < lines.length() {
+      // Parse optional metadata lines: SCOPE and DEPENDS_ON (in either order)
+      let last_idx = tasks.length() - 1
+      for _pass = 0; _pass < 2 && i < lines.length(); _pass = _pass + 1 {
         match parse_scope_line(lines[i]) {
           Some(paths) => {
-            let last_idx = tasks.length() - 1
-            let task = tasks[last_idx]
-            tasks[last_idx] = { ..task, scope: paths }
+            tasks[last_idx] = { ..tasks[last_idx], scope: paths }
             i = i + 1
+            continue
           }
           None => ()
+        }
+        match parse_depends_on_line(lines[i]) {
+          Some(nums) => {
+            let deps = resolve_depends_on(nums, milestone_id, start_task_num)
+            tasks[last_idx] = { ..tasks[last_idx], depends_on: deps }
+            i = i + 1
+            continue
+          }
+          None => break
         }
       }
       continue
@@ -443,4 +486,96 @@ fn parse_scope_line(s : String) -> Array[String]? {
     }
   }
   Some(items)
+}
+
+///|
+fn has_tasks_prefix(s : String) -> Bool {
+  s.has_prefix("TASKS:") || s.has_prefix("tasks:") || s.has_prefix("Tasks:")
+}
+
+///|
+/// Parse a DEPENDS_ON line into task numbers.
+/// Returns Some([]) for "(none)", Some([1, 3]) for "1, 3", None if not a DEPENDS_ON line.
+fn parse_depends_on_line(s : String) -> Array[Int]? {
+  let trimmed = @util.trim(s)
+  if not(
+      trimmed.has_prefix("DEPENDS_ON:") ||
+      trimmed.has_prefix("depends_on:") ||
+      trimmed.has_prefix("Depends_on:") ||
+      trimmed.has_prefix("DEPENDS ON:") ||
+      trimmed.has_prefix("depends on:") ||
+      trimmed.has_prefix("Depends on:") ||
+      trimmed.has_prefix("Depends On:"),
+    ) {
+    return None
+  }
+  // Find the colon and take everything after it
+  let chars = trimmed.to_array()
+  let mut colon_pos = -1
+  for idx = 0; idx < chars.length(); idx = idx + 1 {
+    if chars[idx] == ':' {
+      colon_pos = idx
+      break
+    }
+  }
+  if colon_pos < 0 {
+    return Some([])
+  }
+  let rest = @util.trim(String::from_array(chars[colon_pos + 1:]))
+  // Handle "(none)" or "none"
+  let lower = rest.to_lower()
+  if lower.contains("none") {
+    return Some([])
+  }
+  // Parse comma-separated task numbers
+  let nums : Array[Int] = []
+  for part_view in rest.split(",") {
+    let part = @util.trim(part_view.to_string())
+    if not(part.is_empty()) {
+      let num = parse_int_string(part)
+      if num > 0 {
+        nums.push(num)
+      }
+    }
+  }
+  Some(nums)
+}
+
+///|
+/// Parse a string into a positive integer, returning 0 on failure.
+fn parse_int_string(s : String) -> Int {
+  let chars = s.to_array()
+  let mut num = 0
+  let mut found = false
+  for ch in chars {
+    if ch >= '0' && ch <= '9' {
+      num = num * 10 + (ch.to_int() - '0'.to_int())
+      found = true
+    } else {
+      break
+    }
+  }
+  if found {
+    num
+  } else {
+    0
+  }
+}
+
+///|
+/// Convert planner task numbers (1-based) to actual task IDs.
+/// Task number N in planner output → "{milestone_id}-t{start_task_num + N - 1}"
+fn resolve_depends_on(
+  nums : Array[Int],
+  milestone_id : String,
+  start_task_num : Int,
+) -> Array[String] {
+  let deps : Array[String] = []
+  for n in nums {
+    if n > 0 {
+      let task_num = start_task_num + n - 1
+      deps.push("\{milestone_id}-t\{task_num}")
+    }
+  }
+  deps
 }

@@ -3,14 +3,14 @@
 # whirlwind E2E test runner
 #
 # Modes:
-#   mock        — mock agents, --plan + --dry-run (plan→milestones 変換のみ検証)
+#   mock        — mock agents, --plan full DAG 実行 (DEPENDS_ON形式 + DAGディスパッチ検証)
 #   live        — real agents, --plan full 実行
 #   live --dry-run              — real agents, plan 変換のみ (LLM 分類あり)
 #   mock-flags  — mock agents, CLI フラグ経由 (--milestones パス)
 #   live-flags  — real agents, CLI フラグ経由 (--milestones パス)
 #
 # Examples:
-#   just mock                              # plan→milestones dry-run (CI 向け)
+#   just mock                              # mock full DAG execution (CI 向け)
 #   just live                              # plan full 実行
 #   just live -- --dry-run                 # plan 変換のみ (LLM 分類)
 # ============================================================
@@ -123,13 +123,13 @@ cd "$TMP_DIR"
 unset CLAUDECODE
 
 # --- 実行 ---
-# mock:       --plan + --dry-run (plan→milestones 変換のみ)
+# mock:       --plan full DAG 実行 (mock agents で DEPENDS_ON→DAG dispatch 検証)
 # live:       --plan + EXTRA_ARGS (--dry-run 渡せば変換のみ、なければ full 実行)
 # *-flags:    CLI フラグで直接 milestones を指定
 set +e
 case "$MODE" in
   mock)
-    node "$ROOT_DIR/bin/whirlwind.js" --plan="$TMP_DIR/plan.md" --dry-run --planner="$PLANNER_KIND" --builder="$BUILDER_KIND" --verifier="$VERIFIER_KIND" --log="$LOG_FILE" 2>&1 | tee "$OUTPUT_FILE"
+    node "$ROOT_DIR/bin/whirlwind.js" --plan="$TMP_DIR/plan.md" --planner="$PLANNER_KIND" --builder="$BUILDER_KIND" --verifier="$VERIFIER_KIND" --log="$LOG_FILE" 2>&1 | tee "$OUTPUT_FILE"
     CMD_STATUS=${PIPESTATUS[0]}
     ;;
   live)
@@ -147,9 +147,7 @@ OUTPUT="$(cat "$OUTPUT_FILE")"
 
 # live + --dry-run の組み合わせはアサーションを dry-run 系に切り替える
 IS_DRY_RUN=false
-if [ "$MODE" = "mock" ]; then
-  IS_DRY_RUN=true
-elif [ "$MODE" = "live" ] && has_arg_exact "--dry-run"; then
+if [ "$MODE" = "live" ] && has_arg_exact "--dry-run"; then
   IS_DRY_RUN=true
 fi
 
@@ -267,6 +265,15 @@ fi
 if { [ "$MODE" = "live" ] || [ "$MODE" = "live-flags" ]; } && [ "$IS_DRY_RUN" != true ]; then
   assert_contains "SCOPE:"
   assert_file_contains "$LOG_FILE" "SCOPE:"
+fi
+
+# --- DAG execution assertions (mock mode: full DAG dispatch 検証) ---
+if [ "$MODE" = "mock" ]; then
+  # DAG dispatch was used (not wave-based)
+  assert_file_contains "$LOG_FILE" "Executing DAG for"
+  # Tasks were dispatched with in_flight tracking
+  assert_file_contains "$LOG_FILE" "Dispatching task"
+  assert_file_contains "$LOG_FILE" "in_flight:"
 fi
 
 echo "PASS: All e2e assertions passed ($MODE)"

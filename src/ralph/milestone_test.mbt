@@ -65,6 +65,7 @@ test "JSON roundtrip preserves scope" {
         description: "Update planner",
         wave: 0,
         scope: ["src/ralph/planner.mbt", "src/ralph/milestone.mbt"],
+        depends_on: [],
         status: @types.TaskStatus::Pending,
         result: None,
       },
@@ -73,6 +74,7 @@ test "JSON roundtrip preserves scope" {
         description: "Update tests",
         wave: 0,
         scope: ["src/ralph/milestone_test.mbt"],
+        depends_on: [],
         status: @types.TaskStatus::Done,
         result: Some("updated"),
       },
@@ -81,6 +83,7 @@ test "JSON roundtrip preserves scope" {
         description: "No declared scope",
         wave: 1,
         scope: [],
+        depends_on: [],
         status: @types.TaskStatus::Pending,
         result: None,
       },
@@ -108,6 +111,66 @@ test "JSON roundtrip preserves scope" {
   assert_true(tasks[1].scope.length() == 1)
   inspect(tasks[1].scope[0], content="src/ralph/milestone_test.mbt")
   assert_true(tasks[2].scope.length() == 0)
+}
+
+///|
+test "JSON roundtrip preserves depends_on" {
+  let mgr = @ralph.MilestoneManager::new()
+  mgr.milestones.push({
+    id: "m1",
+    goal: "Preserve depends_on",
+    status: @types.MilestoneStatus::Pending,
+    tasks: [
+      {
+        id: "m1-t1",
+        description: "Independent task",
+        wave: 0,
+        scope: [],
+        depends_on: [],
+        status: @types.TaskStatus::Pending,
+        result: None,
+      },
+      {
+        id: "m1-t2",
+        description: "Depends on t1",
+        wave: 1,
+        scope: [],
+        depends_on: ["m1-t1"],
+        status: @types.TaskStatus::Pending,
+        result: None,
+      },
+      {
+        id: "m1-t3",
+        description: "Depends on t1 and t2",
+        wave: 2,
+        scope: ["src/api.mbt"],
+        depends_on: ["m1-t1", "m1-t2"],
+        status: @types.TaskStatus::Pending,
+        result: None,
+      },
+    ],
+    summary: "",
+  })
+
+  let serialized = mgr.to_json()
+  // depends_on should be serialized only when non-empty
+  assert_true(serialized.contains("\"depends_on\":[\"m1-t1\"]"))
+  assert_true(serialized.contains("\"depends_on\":[\"m1-t1\",\"m1-t2\"]"))
+  // Empty depends_on should NOT appear in JSON (same pattern as scope)
+  assert_false(serialized.contains("\"depends_on\":[]"))
+
+  let reloaded = @ralph.MilestoneManager::load_from_json(serialized)
+  let tasks = reloaded.milestones[0].tasks
+  assert_true(tasks.length() == 3)
+  // Task 1: no dependencies
+  assert_true(tasks[0].depends_on.length() == 0)
+  // Task 2: depends on t1
+  assert_true(tasks[1].depends_on.length() == 1)
+  inspect(tasks[1].depends_on[0], content="m1-t1")
+  // Task 3: depends on t1 and t2
+  assert_true(tasks[2].depends_on.length() == 2)
+  inspect(tasks[2].depends_on[0], content="m1-t1")
+  inspect(tasks[2].depends_on[1], content="m1-t2")
 }
 
 ///|
@@ -237,6 +300,7 @@ test "to_json uses Json API not manual string concatenation" {
         description: "task desc",
         wave: 0,
         scope: [],
+        depends_on: [],
         status: @types.TaskStatus::Pending,
         result: None,
       },
@@ -245,6 +309,7 @@ test "to_json uses Json API not manual string concatenation" {
         description: "task with result",
         wave: 1,
         scope: [],
+        depends_on: [],
         status: @types.TaskStatus::Done,
         result: Some("done result"),
       },
@@ -608,6 +673,159 @@ test "parse_planner_output handles ## WAVE headers" {
   assert_true(tasks.length() == 2)
   inspect(tasks[0].wave, content="0")
   inspect(tasks[1].wave, content="1")
+}
+
+///|
+test "parse_planner_output parses TASKS/DEPENDS_ON format" {
+  let mgr = @ralph.MilestoneManager::new()
+  let output =
+    #|TASKS:
+    #|1. Create database schema
+    #|SCOPE: src/schema.mbt
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Write migration scripts
+    #|SCOPE: db/migrations/001.sql
+    #|DEPENDS_ON: 1
+    #|
+    #|3. Build API handlers
+    #|SCOPE: src/api.mbt
+    #|DEPENDS_ON: 1
+    #|
+    #|4. Add authentication
+    #|SCOPE: src/auth.mbt
+    #|DEPENDS_ON: 2, 3
+  let tasks = mgr.parse_planner_output(output, "m1")
+  assert_true(tasks.length() == 4)
+  // Task 1: no deps
+  inspect(tasks[0].id, content="m1-t1")
+  inspect(tasks[0].description, content="Create database schema")
+  assert_true(tasks[0].scope.length() == 1)
+  inspect(tasks[0].scope[0], content="src/schema.mbt")
+  assert_true(tasks[0].depends_on.is_empty())
+  // Task 2: depends on task 1
+  inspect(tasks[1].id, content="m1-t2")
+  inspect(tasks[1].description, content="Write migration scripts")
+  assert_true(tasks[1].depends_on.length() == 1)
+  inspect(tasks[1].depends_on[0], content="m1-t1")
+  // Task 3: depends on task 1
+  inspect(tasks[2].id, content="m1-t3")
+  assert_true(tasks[2].depends_on.length() == 1)
+  inspect(tasks[2].depends_on[0], content="m1-t1")
+  // Task 4: depends on tasks 2 and 3
+  inspect(tasks[3].id, content="m1-t4")
+  assert_true(tasks[3].depends_on.length() == 2)
+  inspect(tasks[3].depends_on[0], content="m1-t2")
+  inspect(tasks[3].depends_on[1], content="m1-t3")
+  // All tasks in DAG mode get wave 0
+  inspect(tasks[0].wave, content="0")
+  inspect(tasks[1].wave, content="0")
+  inspect(tasks[2].wave, content="0")
+  inspect(tasks[3].wave, content="0")
+}
+
+///|
+test "parse_planner_output DEPENDS_ON none produces empty depends_on" {
+  let mgr = @ralph.MilestoneManager::new()
+  let output =
+    #|TASKS:
+    #|1. Independent task A
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Independent task B
+    #|DEPENDS_ON: (none)
+  let tasks = mgr.parse_planner_output(output, "m1")
+  assert_true(tasks.length() == 2)
+  assert_true(tasks[0].depends_on.is_empty())
+  assert_true(tasks[1].depends_on.is_empty())
+}
+
+///|
+test "parse_planner_output SCOPE and DEPENDS_ON in either order" {
+  let mgr = @ralph.MilestoneManager::new()
+  // Test DEPENDS_ON before SCOPE
+  let output =
+    #|TASKS:
+    #|1. First task
+    #|SCOPE: src/a.mbt
+    #|DEPENDS_ON: (none)
+    #|
+    #|2. Second task with DEPENDS_ON before SCOPE
+    #|DEPENDS_ON: 1
+    #|SCOPE: src/b.mbt
+  let tasks = mgr.parse_planner_output(output, "m1")
+  assert_true(tasks.length() == 2)
+  // Task 1: SCOPE then DEPENDS_ON
+  assert_true(tasks[0].scope.length() == 1)
+  inspect(tasks[0].scope[0], content="src/a.mbt")
+  assert_true(tasks[0].depends_on.is_empty())
+  // Task 2: DEPENDS_ON then SCOPE (reversed order)
+  assert_true(tasks[1].depends_on.length() == 1)
+  inspect(tasks[1].depends_on[0], content="m1-t1")
+  assert_true(tasks[1].scope.length() == 1)
+  inspect(tasks[1].scope[0], content="src/b.mbt")
+}
+
+///|
+test "parse_planner_output DEPENDS_ON with multiple refs" {
+  let mgr = @ralph.MilestoneManager::new()
+  let output =
+    #|TASKS:
+    #|1. Task A
+    #|2. Task B
+    #|3. Task C
+    #|DEPENDS_ON: 1, 3
+  let tasks = mgr.parse_planner_output(output, "m1")
+  assert_true(tasks.length() == 3)
+  // Task C depends on tasks 1 and 3
+  assert_true(tasks[2].depends_on.length() == 2)
+  inspect(tasks[2].depends_on[0], content="m1-t1")
+  inspect(tasks[2].depends_on[1], content="m1-t3")
+}
+
+///|
+test "parse_planner_output WAVE format backward compat with no DEPENDS_ON" {
+  let mgr = @ralph.MilestoneManager::new()
+  let output =
+    #|WAVE 0:
+    #|1. Create database schema
+    #|SCOPE: src/schema.mbt
+    #|2. Write tests
+    #|
+    #|WAVE 1:
+    #|1. Build API handlers
+    #|2. Add authentication
+  let tasks = mgr.parse_planner_output(output, "m1")
+  assert_true(tasks.length() == 4)
+  inspect(tasks[0].wave, content="0")
+  inspect(tasks[0].description, content="Create database schema")
+  assert_true(tasks[0].scope.length() == 1)
+  inspect(tasks[0].scope[0], content="src/schema.mbt")
+  inspect(tasks[1].wave, content="0")
+  inspect(tasks[2].wave, content="1")
+  inspect(tasks[3].wave, content="1")
+  // No DEPENDS_ON in WAVE format → all empty
+  assert_true(tasks[0].depends_on.is_empty())
+  assert_true(tasks[1].depends_on.is_empty())
+  assert_true(tasks[2].depends_on.is_empty())
+  assert_true(tasks[3].depends_on.is_empty())
+}
+
+///|
+test "parse_planner_output TASKS format without DEPENDS_ON lines" {
+  let mgr = @ralph.MilestoneManager::new()
+  let output =
+    #|TASKS:
+    #|1. Task A
+    #|SCOPE: src/a.mbt
+    #|2. Task B
+  let tasks = mgr.parse_planner_output(output, "m1")
+  assert_true(tasks.length() == 2)
+  inspect(tasks[0].description, content="Task A")
+  assert_true(tasks[0].scope.length() == 1)
+  assert_true(tasks[0].depends_on.is_empty())
+  inspect(tasks[1].description, content="Task B")
+  assert_true(tasks[1].depends_on.is_empty())
 }
 
 ///|

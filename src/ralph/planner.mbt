@@ -43,13 +43,17 @@ pub fn PlannerAgent::build_plan_prompt(
     "If the goal mentions future steps (e.g. \"Step 9 will update ...\"), " +
     "treat those as informational context only, not as work to be planned here.\n\n" +
     "## Instructions\n" +
-    "Break down this milestone into concrete tasks grouped by waves.\n" +
-    "Tasks in the same wave can be executed independently.\n" +
-    "Tasks in later waves depend on earlier waves.\n\n" +
+    "Break down this milestone into concrete, numbered tasks.\n" +
+    "For each task, declare which earlier tasks it depends on using DEPENDS_ON.\n" +
+    "Tasks with no dependencies can execute in parallel.\n" +
+    "A task will not start until all of its dependencies have completed.\n\n" +
     "## Output Format\n" +
-    "WAVE 0:\n1. First task description\nSCOPE: src/foo.mbt, test/foo_test.mbt\n2. Second task description\nSCOPE: src/bar.mbt\n\n" +
-    "WAVE 1:\n1. Task that depends on wave 0\nSCOPE: src/baz.mbt, src/qux.mbt\n\n" +
-    "Add a SCOPE line (comma-separated file paths expected to be modified) under each task. Omit SCOPE if unknown.\n",
+    "TASKS:\n" +
+    "1. First task description\nSCOPE: src/foo.mbt, test/foo_test.mbt\nDEPENDS_ON: (none)\n\n" +
+    "2. Second task description\nSCOPE: src/bar.mbt\nDEPENDS_ON: 1\n\n" +
+    "3. Task that depends on multiple earlier tasks\nSCOPE: src/baz.mbt, src/qux.mbt\nDEPENDS_ON: 1, 2\n\n" +
+    "Add a SCOPE line (comma-separated file paths expected to be modified) under each task. Omit SCOPE if unknown.\n" +
+    "Add a DEPENDS_ON line with comma-separated task numbers. Use \"(none)\" if the task has no dependencies.\n",
   )
   prompt.to_string()
 }
