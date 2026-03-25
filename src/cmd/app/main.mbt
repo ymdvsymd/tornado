@@ -168,13 +168,7 @@ fn run_ralph(
   let backends = @agent.create_backends(config.agents)
   // Load or create milestones
   let (milestones_path, mgr) = match plan_path {
-    Some(path) =>
-      load_milestones_from_plan(
-        path,
-        config,
-        backends,
-        allow_llm_classification=planner_kind is Some(_),
-      )
+    Some(path) => load_milestones_from_plan(path, config, backends)
     None => load_milestones_from_file(config)
   }
   if mgr.milestones.is_empty() {
@@ -274,7 +268,6 @@ fn load_milestones_from_plan(
   path : String,
   config : @config.ProjectConfig,
   backends : Map[String, @agent.BoxedBackend],
-  allow_llm_classification? : Bool = false,
 ) -> (String, @ralph.MilestoneManager) {
   let content = match read_file_result(path) {
     Err(err) => {
@@ -284,9 +277,7 @@ fn load_milestones_from_plan(
     Ok(content) => content
   }
   let doc = @plan.parse_plan(content)
-  let mgr = classify_plan_document(
-    doc, config, backends, allow_llm_classification,
-  )
+  let mgr = classify_plan_document(doc, config, backends)
   if mgr.milestones.is_empty() {
     log("ERROR", "Plan conversion produced zero milestones")
     return (".whirlwind/milestones.json", mgr)
@@ -309,7 +300,6 @@ fn classify_plan_document(
   doc : @plan.PlanDocument,
   config : @config.ProjectConfig,
   backends : Map[String, @agent.BoxedBackend],
-  allow_llm_classification : Bool,
 ) -> @ralph.MilestoneManager {
   let classifications : Array[@plan.SectionClass] = []
   let uncertain_indexes : Array[Int] = []
@@ -324,7 +314,7 @@ fn classify_plan_document(
   }
   if not(uncertain_indexes.is_empty()) {
     let resolved = resolve_uncertain_sections(
-      uncertain_sections, config, backends, allow_llm_classification,
+      uncertain_sections, config, backends,
     )
     for i in 0..<uncertain_indexes.length() {
       classifications[uncertain_indexes[i]] = resolved[i]
@@ -338,10 +328,9 @@ pub fn classify_plan_document_for_test(
   content : String,
   config : @config.ProjectConfig,
   backends : Map[String, @agent.BoxedBackend],
-  allow_llm_classification? : Bool = false,
 ) -> @ralph.MilestoneManager {
   let doc = @plan.parse_plan(content)
-  classify_plan_document(doc, config, backends, allow_llm_classification)
+  classify_plan_document(doc, config, backends)
 }
 
 ///|
@@ -349,12 +338,7 @@ fn resolve_uncertain_sections(
   sections : Array[@plan.PlanSection],
   config : @config.ProjectConfig,
   backends : Map[String, @agent.BoxedBackend],
-  allow_llm_classification : Bool,
 ) -> Array[@plan.SectionClass] {
-  if not(allow_llm_classification) {
-    warn_low_confidence_defaults(sections.length())
-    return default_uncertain_classes(sections.length())
-  }
   match find_planner_backend(config, backends) {
     None => {
       warn_low_confidence_defaults(sections.length())
