@@ -23,10 +23,10 @@ export function createLogger(
   tag: string,
   stream: NodeJS.WritableStream = process.stderr,
 ): (message: string) => void {
+  const logFile = process.env.WHIRLWIND_LOG_FILE || "";
   return function log(message: string): void {
     const line = `[${tag}] ${message}\n`;
     stream.write(line);
-    const logFile = process.env.WHIRLWIND_LOG_FILE;
     if (logFile) {
       try {
         appendFileSync(logFile, line);
