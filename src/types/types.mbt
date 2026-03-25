@@ -341,56 +341,10 @@ pub(all) struct Milestone {
 pub(all) struct RalphTask {
   id : String
   description : String
-  mut wave : Int
   mut status : TaskStatus
   mut result : String?
   scope : Array[String]
   depends_on : Array[String]
-}
-
-///|
-/// Get all tasks in a specific wave
-pub fn Milestone::get_wave_tasks(
-  self : Milestone,
-  wave : Int,
-) -> Array[RalphTask] {
-  let result : Array[RalphTask] = []
-  for t in self.tasks {
-    if t.wave == wave {
-      result.push(t)
-    }
-  }
-  result
-}
-
-///|
-/// Check if milestone has undone tasks
-pub fn Milestone::has_undone_tasks(self : Milestone) -> Bool {
-  self.tasks
-  .iter()
-  .any(fn(t) {
-    match t.status {
-      Pending | InProgress(_) | Failed(_) => true
-      _ => false
-    }
-  })
-}
-
-///|
-/// Get the next wave number that has pending tasks
-pub fn Milestone::next_wave_number(self : Milestone) -> Int? {
-  let mut min_wave : Int? = None
-  for t in self.tasks {
-    match t.status {
-      Pending | InProgress(_) | Failed(_) =>
-        match min_wave {
-          None => min_wave = Some(t.wave)
-          Some(w) => if t.wave < w { min_wave = Some(t.wave) }
-        }
-      _ => ()
-    }
-  }
-  min_wave
 }
 
 ///|

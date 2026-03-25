@@ -1,7 +1,7 @@
 ///|
 test "VerifierAgent::parse_verdict approved" {
   let v = @ralph.VerifierAgent::new()
-  let verdict = v.parse_verdict("All looks good. <wave_approved>")
+  let verdict = v.parse_verdict("All looks good. <approved>")
   inspect(verdict, content="Approved")
 }
 
@@ -68,7 +68,7 @@ test "VerifierAgent::build_perspective_prompt includes code quality checklist" {
   assert_true(
     prompt.contains("Code Quality") || prompt.contains("コード品質"),
   )
-  assert_true(prompt.contains("<wave_approved>"))
+  assert_true(prompt.contains("<approved>"))
 }
 
 ///|
@@ -85,7 +85,7 @@ test "VerifierAgent::build_perspective_prompt includes performance checklist" {
   assert_true(
     prompt.contains("Performance") || prompt.contains("パフォーマンス"),
   )
-  assert_true(prompt.contains("<wave_approved>"))
+  assert_true(prompt.contains("<approved>"))
 }
 
 ///|
@@ -102,7 +102,7 @@ test "VerifierAgent::build_perspective_prompt includes security checklist" {
   assert_true(
     prompt.contains("Security") || prompt.contains("セキュリティ"),
   )
-  assert_true(prompt.contains("<wave_approved>"))
+  assert_true(prompt.contains("<approved>"))
 }
 
 ///|
@@ -117,7 +117,7 @@ test "VerifierAgent::build_perspective_prompt goal alignment includes milestone 
   }
   let prompt = v.build_perspective_prompt(GoalAlignment, milestone, 0, [], "")
   assert_true(prompt.contains("Ship milestone goal text"))
-  assert_true(prompt.contains("<wave_approved>"))
+  assert_true(prompt.contains("<approved>"))
 }
 
 ///|
@@ -214,7 +214,7 @@ test "inject_perspective_tag prefixes non task item" {
 ///|
 test "VerifierAgent::verify with mock backend approved calls all four perspectives" {
   let v = @ralph.VerifierAgent::new()
-  let mock = @agent.MockBackend::new(default_response="<wave_approved>")
+  let mock = @agent.MockBackend::new(default_response="<approved>")
   let backend = mock.boxed()
   let milestone : @types.Milestone = {
     id: "m1",
@@ -232,7 +232,7 @@ test "VerifierAgent::verify with mock backend approved calls all four perspectiv
 ///|
 test "VerifierAgent::verify with explicit perspectives skips goal alignment" {
   let v = @ralph.VerifierAgent::new()
-  let mock = @agent.MockBackend::new(default_response="<wave_approved>")
+  let mock = @agent.MockBackend::new(default_response="<approved>")
   let backend = mock.boxed()
   let milestone : @types.Milestone = {
     id: "m1",
@@ -254,7 +254,7 @@ test "VerifierAgent::verify with explicit perspectives skips goal alignment" {
 ///|
 test "VerifierAgent::verify with goal alignment only calls backend once" {
   let v = @ralph.VerifierAgent::new()
-  let mock = @agent.MockBackend::new(default_response="<wave_approved>")
+  let mock = @agent.MockBackend::new(default_response="<approved>")
   let backend = mock.boxed()
   let milestone : @types.Milestone = {
     id: "m1",

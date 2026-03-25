@@ -63,7 +63,6 @@ test "JSON roundtrip preserves scope" {
       {
         id: "m1-t1",
         description: "Update planner",
-        wave: 0,
         scope: ["src/ralph/planner.mbt", "src/ralph/milestone.mbt"],
         depends_on: [],
         status: @types.TaskStatus::Pending,
@@ -72,7 +71,6 @@ test "JSON roundtrip preserves scope" {
       {
         id: "m1-t2",
         description: "Update tests",
-        wave: 0,
         scope: ["src/ralph/milestone_test.mbt"],
         depends_on: [],
         status: @types.TaskStatus::Done,
@@ -81,7 +79,6 @@ test "JSON roundtrip preserves scope" {
       {
         id: "m1-t3",
         description: "No declared scope",
-        wave: 1,
         scope: [],
         depends_on: [],
         status: @types.TaskStatus::Pending,
@@ -124,7 +121,6 @@ test "JSON roundtrip preserves depends_on" {
       {
         id: "m1-t1",
         description: "Independent task",
-        wave: 0,
         scope: [],
         depends_on: [],
         status: @types.TaskStatus::Pending,
@@ -133,7 +129,6 @@ test "JSON roundtrip preserves depends_on" {
       {
         id: "m1-t2",
         description: "Depends on t1",
-        wave: 1,
         scope: [],
         depends_on: ["m1-t1"],
         status: @types.TaskStatus::Pending,
@@ -142,7 +137,6 @@ test "JSON roundtrip preserves depends_on" {
       {
         id: "m1-t3",
         description: "Depends on t1 and t2",
-        wave: 2,
         scope: ["src/api.mbt"],
         depends_on: ["m1-t1", "m1-t2"],
         status: @types.TaskStatus::Pending,
@@ -298,7 +292,6 @@ test "to_json uses Json API not manual string concatenation" {
       {
         id: "m1-t1",
         description: "task desc",
-        wave: 0,
         scope: [],
         depends_on: [],
         status: @types.TaskStatus::Pending,
@@ -307,7 +300,6 @@ test "to_json uses Json API not manual string concatenation" {
       {
         id: "m1-t2",
         description: "task with result",
-        wave: 1,
         scope: [],
         depends_on: [],
         status: @types.TaskStatus::Done,
@@ -402,119 +394,17 @@ test "next_pending_milestone returns None when all done" {
 }
 
 ///|
-test "get_wave_tasks filters by wave" {
-  let json =
-    #|{
-    #|  "milestones": [
-    #|    {
-    #|      "id": "m1", "goal": "A", "status": "pending",
-    #|      "tasks": [
-    #|        { "id": "m1-t1", "description": "a", "wave": 0, "status": "pending" },
-    #|        { "id": "m1-t2", "description": "b", "wave": 0, "status": "pending" },
-    #|        { "id": "m1-t3", "description": "c", "wave": 1, "status": "pending" }
-    #|      ]
-    #|    }
-    #|  ]
-    #|}
-  let mgr = @ralph.MilestoneManager::load_from_json(json)
-  let wave0 = mgr.milestones[0].get_wave_tasks(0)
-  assert_true(wave0.length() == 2)
-  let wave1 = mgr.milestones[0].get_wave_tasks(1)
-  assert_true(wave1.length() == 1)
-  inspect(wave1[0].id, content="m1-t3")
-}
-
-///|
-test "has_undone_tasks detects pending tasks" {
-  let json =
-    #|{
-    #|  "milestones": [
-    #|    {
-    #|      "id": "m1", "goal": "A", "status": "pending",
-    #|      "tasks": [
-    #|        { "id": "m1-t1", "description": "a", "wave": 0, "status": "done" },
-    #|        { "id": "m1-t2", "description": "b", "wave": 0, "status": "pending" }
-    #|      ]
-    #|    }
-    #|  ]
-    #|}
-  let mgr = @ralph.MilestoneManager::load_from_json(json)
-  assert_true(mgr.milestones[0].has_undone_tasks())
-}
-
-///|
-test "has_undone_tasks returns false when all done" {
-  let json =
-    #|{
-    #|  "milestones": [
-    #|    {
-    #|      "id": "m1", "goal": "A", "status": "pending",
-    #|      "tasks": [
-    #|        { "id": "m1-t1", "description": "a", "wave": 0, "status": "done" }
-    #|      ]
-    #|    }
-    #|  ]
-    #|}
-  let mgr = @ralph.MilestoneManager::load_from_json(json)
-  assert_true(not(mgr.milestones[0].has_undone_tasks()))
-}
-
-///|
-test "next_wave_number finds lowest pending wave" {
-  let json =
-    #|{
-    #|  "milestones": [
-    #|    {
-    #|      "id": "m1", "goal": "A", "status": "pending",
-    #|      "tasks": [
-    #|        { "id": "m1-t1", "description": "a", "wave": 0, "status": "done" },
-    #|        { "id": "m1-t2", "description": "b", "wave": 1, "status": "pending" },
-    #|        { "id": "m1-t3", "description": "c", "wave": 2, "status": "pending" }
-    #|      ]
-    #|    }
-    #|  ]
-    #|}
-  let mgr = @ralph.MilestoneManager::load_from_json(json)
-  inspect(mgr.milestones[0].next_wave_number(), content="Some(1)")
-}
-
-///|
-test "parse_planner_output parses WAVE format" {
-  let mgr = @ralph.MilestoneManager::new()
-  let output =
-    #|WAVE 0:
-    #|1. Create database schema
-    #|2. Write migration scripts
-    #|
-    #|WAVE 1:
-    #|1. Build API handlers
-    #|2. Add authentication
-  let tasks = mgr.parse_planner_output(output, "m1")
-  assert_true(tasks.length() == 4)
-  inspect(tasks[0].wave, content="0")
-  inspect(tasks[0].description, content="Create database schema")
-  inspect(tasks[1].wave, content="0")
-  inspect(tasks[1].description, content="Write migration scripts")
-  inspect(tasks[2].wave, content="1")
-  inspect(tasks[2].description, content="Build API handlers")
-  inspect(tasks[3].wave, content="1")
-  inspect(tasks[3].description, content="Add authentication")
-}
-
-///|
 test "parse_planner_output parses SCOPE lines" {
   let mgr = @ralph.MilestoneManager::new()
   let output =
-    #|WAVE 0:
+    #|TASKS:
     #|1. Create database schema
     #|SCOPE: src/a.ts, src/b.ts
     #|2. Write migration scripts
     #|SCOPE: db/migrations/001.sql
-    #|
-    #|WAVE 1:
-    #|1. Build API handlers
+    #|3. Build API handlers
     #|SCOPE: src/api.ts, src/auth.ts
-    #|2. Add authentication
+    #|4. Add authentication
     #|SCOPE: src/session.ts
   let tasks = mgr.parse_planner_output(output, "m1")
   assert_true(tasks.length() == 4)
@@ -534,13 +424,11 @@ test "parse_planner_output parses SCOPE lines" {
 test "parse_planner_output without SCOPE lines defaults to empty scope" {
   let mgr = @ralph.MilestoneManager::new()
   let output =
-    #|WAVE 0:
+    #|TASKS:
     #|1. Create database schema
     #|2. Write migration scripts
-    #|
-    #|WAVE 1:
-    #|1. Build API handlers
-    #|2. Add authentication
+    #|3. Build API handlers
+    #|4. Add authentication
   let tasks = mgr.parse_planner_output(output, "m1")
   assert_true(tasks.length() == 4)
   assert_true(tasks[0].scope.length() == 0)
@@ -553,15 +441,13 @@ test "parse_planner_output without SCOPE lines defaults to empty scope" {
 test "parse_planner_output mixed SCOPE and no-SCOPE tasks" {
   let mgr = @ralph.MilestoneManager::new()
   let output =
-    #|WAVE 0:
+    #|TASKS:
     #|1. Create database schema
     #|SCOPE: src/schema.mbt, src/migrations.mbt
     #|2. Write migration scripts
-    #|
-    #|WAVE 1:
-    #|1. Build API handlers
+    #|3. Build API handlers
     #|SCOPE: src/api.mbt
-    #|2. Add authentication
+    #|4. Add authentication
   let tasks = mgr.parse_planner_output(output, "m1")
   assert_true(tasks.length() == 4)
   assert_true(tasks[0].scope.length() == 2)
@@ -577,7 +463,7 @@ test "parse_planner_output mixed SCOPE and no-SCOPE tasks" {
 test "parse_planner_output with dash items" {
   let mgr = @ralph.MilestoneManager::new()
   let output =
-    #|WAVE 0:
+    #|TASKS:
     #|- Set up project structure
     #|- Install dependencies
   let tasks = mgr.parse_planner_output(output, "m1")
@@ -586,34 +472,15 @@ test "parse_planner_output with dash items" {
 }
 
 ///|
-test "parse_planner_output handles markdown bold WAVE headers" {
-  let mgr = @ralph.MilestoneManager::new()
-  let output =
-    #|**WAVE 0:**
-    #|1. Create database schema
-    #|2. Write migration scripts
-    #|
-    #|**WAVE 1:**
-    #|1. Build API handlers
-  let tasks = mgr.parse_planner_output(output, "m1")
-  assert_true(tasks.length() == 3)
-  inspect(tasks[0].wave, content="0")
-  inspect(tasks[1].wave, content="0")
-  inspect(tasks[2].wave, content="1")
-  inspect(tasks[2].description, content="Build API handlers")
-}
-
-///|
 test "parse_planner_output stops at --- separator after tasks" {
   let mgr = @ralph.MilestoneManager::new()
   let output =
-    #|WAVE 0:
+    #|TASKS:
     #|1. Create database schema
     #|
     #|---
     #|
-    #|- Wave 0 can run in parallel
-    #|- Wave 1 depends on wave 0
+    #|- Some notes
   let tasks = mgr.parse_planner_output(output, "m1")
   assert_true(tasks.length() == 1)
   inspect(tasks[0].description, content="Create database schema")
@@ -627,52 +494,33 @@ test "parse_planner_output ignores --- before tasks" {
     #|
     #|---
     #|
-    #|## WAVE 0:
+    #|TASKS:
     #|1. Create database schema
-    #|
-    #|## WAVE 1:
-    #|1. Build API handlers
+    #|2. Build API handlers
     #|
     #|---
     #|
-    #|- Wave 0 note
+    #|- Note
   let tasks = mgr.parse_planner_output(output, "m1")
   assert_true(tasks.length() == 2)
-  inspect(tasks[0].wave, content="0")
-  inspect(tasks[1].wave, content="1")
 }
 
 ///|
-test "parse_planner_output ignores context bullets before first WAVE header" {
+test "parse_planner_output ignores context bullets before first TASKS header" {
   let mgr = @ralph.MilestoneManager::new()
   let output =
     #|**Key context from exploration:**
     #|- libs/example.py already exists
     #|- config/app.yml is missing
     #|---
-    #|WAVE 0:
+    #|TASKS:
     #|1. Create config/app.yml
     #|2. Wire the loader
   let tasks = mgr.parse_planner_output(output, "m1")
   assert_true(tasks.length() == 2)
-  inspect(tasks[0].wave, content="0")
+
   inspect(tasks[0].description, content="Create config/app.yml")
   inspect(tasks[1].description, content="Wire the loader")
-}
-
-///|
-test "parse_planner_output handles ## WAVE headers" {
-  let mgr = @ralph.MilestoneManager::new()
-  let output =
-    #|## WAVE 0:
-    #|1. First task
-    #|
-    #|## WAVE 1:
-    #|1. Second task
-  let tasks = mgr.parse_planner_output(output, "m1")
-  assert_true(tasks.length() == 2)
-  inspect(tasks[0].wave, content="0")
-  inspect(tasks[1].wave, content="1")
 }
 
 ///|
@@ -717,11 +565,6 @@ test "parse_planner_output parses TASKS/DEPENDS_ON format" {
   assert_true(tasks[3].depends_on.length() == 2)
   inspect(tasks[3].depends_on[0], content="m1-t2")
   inspect(tasks[3].depends_on[1], content="m1-t3")
-  // All tasks in DAG mode get wave 0
-  inspect(tasks[0].wave, content="0")
-  inspect(tasks[1].wave, content="0")
-  inspect(tasks[2].wave, content="0")
-  inspect(tasks[3].wave, content="0")
 }
 
 ///|
@@ -781,34 +624,6 @@ test "parse_planner_output DEPENDS_ON with multiple refs" {
   assert_true(tasks[2].depends_on.length() == 2)
   inspect(tasks[2].depends_on[0], content="m1-t1")
   inspect(tasks[2].depends_on[1], content="m1-t3")
-}
-
-///|
-test "parse_planner_output WAVE format backward compat with no DEPENDS_ON" {
-  let mgr = @ralph.MilestoneManager::new()
-  let output =
-    #|WAVE 0:
-    #|1. Create database schema
-    #|SCOPE: src/schema.mbt
-    #|2. Write tests
-    #|
-    #|WAVE 1:
-    #|1. Build API handlers
-    #|2. Add authentication
-  let tasks = mgr.parse_planner_output(output, "m1")
-  assert_true(tasks.length() == 4)
-  inspect(tasks[0].wave, content="0")
-  inspect(tasks[0].description, content="Create database schema")
-  assert_true(tasks[0].scope.length() == 1)
-  inspect(tasks[0].scope[0], content="src/schema.mbt")
-  inspect(tasks[1].wave, content="0")
-  inspect(tasks[2].wave, content="1")
-  inspect(tasks[3].wave, content="1")
-  // No DEPENDS_ON in WAVE format → all empty
-  assert_true(tasks[0].depends_on.is_empty())
-  assert_true(tasks[1].depends_on.is_empty())
-  assert_true(tasks[2].depends_on.is_empty())
-  assert_true(tasks[3].depends_on.is_empty())
 }
 
 ///|

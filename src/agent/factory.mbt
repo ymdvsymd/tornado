@@ -16,7 +16,7 @@ pub fn create_backend(config : @types.AgentConfig) -> BoxedBackend {
           MockBackend::new(
             default_response="TASKS:\n1. Mock planned task\nDEPENDS_ON: (none)",
           ).boxed()
-        Verifier => MockBackend::new(default_response="<wave_approved>").boxed()
+        Verifier => MockBackend::new(default_response="<approved>").boxed()
         _ => MockBackend::new().boxed()
       }
   }

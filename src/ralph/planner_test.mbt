@@ -38,15 +38,11 @@ test "PlannerAgent::parse_plan delegates to MilestoneManager" {
   let planner = @ralph.PlannerAgent::new()
   let mgr = @ralph.MilestoneManager::new()
   let output =
-    #|WAVE 0:
+    #|TASKS:
     #|1. Set up database
-    #|
-    #|WAVE 1:
-    #|1. Create API routes
+    #|2. Create API routes
   let tasks = planner.parse_plan(output, "m1", mgr)
   assert_true(tasks.length() == 2)
-  inspect(tasks[0].wave, content="0")
-  inspect(tasks[1].wave, content="1")
 }
 
 ///|
@@ -74,7 +70,7 @@ test "PlannerAgent::plan with mock backend" {
   let planner = @ralph.PlannerAgent::new()
   let mgr = @ralph.MilestoneManager::new()
   let mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Create schema\n2. Write migrations\n\nWAVE 1:\n1. Build handlers",
+    default_response="TASKS:\n1. Create schema\n2. Write migrations\n3. Build handlers",
   )
   let backend = mock.boxed()
   let milestone : @types.Milestone = {
@@ -87,5 +83,4 @@ test "PlannerAgent::plan with mock backend" {
   let result = planner.plan(milestone, backend, "", [], mgr)
   assert_true(result.tasks.length() == 3)
   inspect(result.tasks[0].description, content="Create schema")
-  inspect(result.tasks[2].wave, content="1")
 }

@@ -149,12 +149,10 @@ test "RalphTask creation and status update" {
     description: "write tests",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: @types.TaskStatus::Pending,
     result: None,
   }
   inspect(t.status, content="Pending")
-  inspect(t.wave, content="0")
   t.status = @types.TaskStatus::Done
   t.result = Some("all tests pass")
   inspect(t.status, content="Done")
@@ -204,141 +202,4 @@ test "VerifierVerdict show" {
     @types.VerifierVerdict::MilestoneFailed("critical failure"),
     content="MilestoneFailed(\"critical failure\")",
   )
-}
-
-///|
-test "Milestone::get_wave_tasks filters by wave number" {
-  let m : @types.Milestone = {
-    id: "m1",
-    goal: "build feature",
-    status: @types.MilestoneStatus::Pending,
-    tasks: [
-      {
-        id: "m1-t1",
-        description: "a",
-        scope: [],
-        depends_on: [],
-        wave: 0,
-        status: @types.TaskStatus::Pending,
-        result: None,
-      },
-      {
-        id: "m1-t2",
-        description: "b",
-        scope: [],
-        depends_on: [],
-        wave: 0,
-        status: @types.TaskStatus::Pending,
-        result: None,
-      },
-      {
-        id: "m1-t3",
-        description: "c",
-        scope: [],
-        depends_on: [],
-        wave: 1,
-        status: @types.TaskStatus::Pending,
-        result: None,
-      },
-    ],
-    summary: "",
-  }
-  let wave0 = m.get_wave_tasks(0)
-  assert_true(wave0.length() == 2)
-  let wave1 = m.get_wave_tasks(1)
-  assert_true(wave1.length() == 1)
-  inspect(wave1[0].id, content="m1-t3")
-}
-
-///|
-test "Milestone::has_undone_tasks detects pending tasks" {
-  let m : @types.Milestone = {
-    id: "m1",
-    goal: "build feature",
-    status: @types.MilestoneStatus::Pending,
-    tasks: [
-      {
-        id: "m1-t1",
-        description: "a",
-        scope: [],
-        depends_on: [],
-        wave: 0,
-        status: @types.TaskStatus::Done,
-        result: None,
-      },
-      {
-        id: "m1-t2",
-        description: "b",
-        scope: [],
-        depends_on: [],
-        wave: 0,
-        status: @types.TaskStatus::Pending,
-        result: None,
-      },
-    ],
-    summary: "",
-  }
-  assert_true(m.has_undone_tasks())
-}
-
-///|
-test "Milestone::has_undone_tasks returns false when all done" {
-  let m : @types.Milestone = {
-    id: "m1",
-    goal: "build feature",
-    status: @types.MilestoneStatus::Pending,
-    tasks: [
-      {
-        id: "m1-t1",
-        description: "a",
-        scope: [],
-        depends_on: [],
-        wave: 0,
-        status: @types.TaskStatus::Done,
-        result: None,
-      },
-    ],
-    summary: "",
-  }
-  assert_true(not(m.has_undone_tasks()))
-}
-
-///|
-test "Milestone::next_wave_number finds lowest pending wave" {
-  let m : @types.Milestone = {
-    id: "m1",
-    goal: "build feature",
-    status: @types.MilestoneStatus::Pending,
-    tasks: [
-      {
-        id: "m1-t1",
-        description: "a",
-        scope: [],
-        depends_on: [],
-        wave: 0,
-        status: @types.TaskStatus::Done,
-        result: None,
-      },
-      {
-        id: "m1-t2",
-        description: "b",
-        scope: [],
-        depends_on: [],
-        wave: 1,
-        status: @types.TaskStatus::Pending,
-        result: None,
-      },
-      {
-        id: "m1-t3",
-        description: "c",
-        scope: [],
-        depends_on: [],
-        wave: 2,
-        status: @types.TaskStatus::Pending,
-        result: None,
-      },
-    ],
-    summary: "",
-  }
-  inspect(m.next_wave_number(), content="Some(1)")
 }

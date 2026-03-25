@@ -252,21 +252,6 @@ fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
   self.current_phase = ExecutingDag(milestone.id)
   emit_info(self, "Executing DAG for \{milestone.id}")
 
-  // Build wave barriers for legacy WAVE tasks (design D2)
-  // Barriers are compact (prev_ids, curr_ids) pairs — no O(N*M) edge tuples
-  let wave_barriers = build_wave_barriers(milestone.tasks)
-  if not(wave_barriers.is_empty()) {
-    let mut edge_count = 0
-    for barrier in wave_barriers {
-      let (prev, curr) = barrier
-      edge_count = edge_count + prev.length() * curr.length()
-    }
-    emit_info(
-      self,
-      "Applied \{wave_barriers.length()} wave barriers (\{edge_count} implicit deps)",
-    )
-  }
-
   // Add implicit scope-overlap edges into depends_on
   let scope_edges = add_scope_edges(milestone.tasks)
   // apply_scope_edges returns only actually-inserted edges (skipping
@@ -412,23 +397,6 @@ fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
         deps_remaining[t.id] = count
       }
 
-      // Inject wave barrier deps into deps_remaining (no edge materialization)
-      let wave_barrier_map : Map[String, Int] = {}
-      let mut barrier_idx = 0
-      for barrier in wave_barriers {
-        let (prev_ids, curr_ids) = barrier
-        for prev_id in prev_ids {
-          wave_barrier_map[prev_id] = barrier_idx
-        }
-        for curr_id in curr_ids {
-          match deps_remaining.get(curr_id) {
-            Some(d) => deps_remaining[curr_id] = d + prev_ids.length()
-            None => ()
-          }
-        }
-        barrier_idx = barrier_idx + 1
-      }
-
       // Propagate already-done tasks and seed ready queue
       let done_set : Map[String, Bool] = {}
       for t in milestone.tasks {
@@ -451,19 +419,6 @@ fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
                   None => ()
                 }
               }
-            None => ()
-          }
-          // Propagate through wave barriers
-          match wave_barrier_map.get(t.id) {
-            Some(bi) => {
-              let (_, curr_ids) = wave_barriers[bi]
-              for curr_id in curr_ids {
-                match deps_remaining.get(curr_id) {
-                  Some(d) => deps_remaining[curr_id] = d - 1
-                  None => ()
-                }
-              }
-            }
             None => ()
           }
         }
@@ -548,32 +503,6 @@ fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
                   }
                 None => ()
               }
-              // Propagate completion: unblock wave barrier dependents
-              match wave_barrier_map.get(task.id) {
-                Some(bi) => {
-                  let (_, curr_ids) = wave_barriers[bi]
-                  for curr_id in curr_ids {
-                    match deps_remaining.get(curr_id) {
-                      Some(d) => {
-                        let new_d = d - 1
-                        deps_remaining[curr_id] = new_d
-                        if new_d == 0 {
-                          match task_map.get(curr_id) {
-                            Some(t) =>
-                              if not(t.status is Done) &&
-                                not(t.status is Failed(_)) {
-                                ready_queue.push(t)
-                              }
-                            None => ()
-                          }
-                        }
-                      }
-                      None => ()
-                    }
-                  }
-                }
-                None => ()
-              }
             }
             _ => {
               let err = validated.error.unwrap_or("unknown error")
@@ -581,13 +510,7 @@ fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
               task.result = Some(validated.content)
               emit_info(self, "Task \{task.id} failed: \{err}")
               // Cascade failure to all transitive dependents
-              self.cascade_fail(
-                task.id,
-                task_map,
-                reverse_deps,
-                wave_barriers,
-                wave_barrier_map,
-              )
+              self.cascade_fail(task.id, task_map, reverse_deps)
               failed = true
             }
           }
@@ -622,7 +545,7 @@ fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
             task_files.push((task, changed))
           }
         }
-        let conflicts = detect_wave_file_conflicts(task_files)
+        let conflicts = detect_file_conflicts(task_files)
         if not(conflicts.is_empty()) {
           for conflict in conflicts {
             let (file, task_ids) = conflict
@@ -642,16 +565,13 @@ fn RalphLoop::run_dag(self : RalphLoop, milestone : @types.Milestone) -> Bool {
 ///|
 /// Cascade failure to all transitive dependents of a failed task.
 ///
-/// BFS through reverse_deps (explicit deps) and wave_barrier_map to find
-/// all tasks that transitively depend on the failed task, marking them as
-/// Failed("blocked by failed task {id}").
+/// BFS through reverse_deps to find all tasks that transitively depend on
+/// the failed task, marking them as Failed("blocked by failed task {id}").
 fn RalphLoop::cascade_fail(
   self : RalphLoop,
   failed_id : String,
   task_map : Map[String, @types.RalphTask],
   reverse_deps : Map[String, Array[String]],
-  wave_barriers : Array[(Array[String], Array[String])],
-  wave_barrier_map : Map[String, Int],
 ) -> Unit {
   let visited : Map[String, Bool] = {}
   visited[failed_id] = true
@@ -660,7 +580,6 @@ fn RalphLoop::cascade_fail(
   while qi < queue.length() {
     let current = queue[qi]
     qi = qi + 1
-    // Propagate through explicit reverse deps
     match reverse_deps.get(current) {
       Some(succs) =>
         for succ in succs {
@@ -680,30 +599,6 @@ fn RalphLoop::cascade_fail(
             }
           }
         }
-      None => ()
-    }
-    // Propagate through wave barriers
-    match wave_barrier_map.get(current) {
-      Some(bi) => {
-        let (_, curr_ids) = wave_barriers[bi]
-        for curr_id in curr_ids {
-          if not(visited.contains(curr_id)) {
-            visited[curr_id] = true
-            match task_map.get(curr_id) {
-              Some(t) =>
-                if not(t.status is Done) && not(t.status is Failed(_)) {
-                  t.status = Failed("blocked by failed task \{failed_id}")
-                  emit_info(
-                    self,
-                    "Task \{curr_id} cascade-failed: blocked by \{failed_id}",
-                  )
-                  queue.push(curr_id)
-                }
-              None => ()
-            }
-          }
-        }
-      }
       None => ()
     }
   }
@@ -829,7 +724,7 @@ fn RalphLoop::verify_milestone(
   match self.verifier {
     None => true
     Some(verifier) => {
-      let verification_wave = last_wave_number(milestone)
+      let verification_wave = 0
       self.current_phase = Verifying(milestone.id, verification_wave)
       emit_info(
         self,
@@ -1176,17 +1071,6 @@ fn collect_all_task_results(
 }
 
 ///|
-fn last_wave_number(milestone : @types.Milestone) -> Int {
-  let mut wave = 0
-  for task in milestone.tasks {
-    if task.wave > wave {
-      wave = task.wave
-    }
-  }
-  wave
-}
-
-///|
 fn handle_event(
   rl : RalphLoop,
   agent_id : String,
@@ -1326,7 +1210,7 @@ pub fn extract_changed_files(output : String) -> Array[String] {
 
 ///|
 /// (file_path, conflicting_task_ids) for files edited by multiple tasks.
-pub fn detect_wave_file_conflicts(
+pub fn detect_file_conflicts(
   task_files : Array[(@types.RalphTask, Array[String])],
 ) -> Array[(String, Array[String])] {
   // Build a map: file_path -> [task_id, ...]
@@ -1385,49 +1269,4 @@ pub fn detect_scope_overlaps(
     }
   }
   overlaps
-}
-
-///| Resolve planned scope overlaps by moving conflicting tasks to a new wave.
-
-///|
-
-///| For each overlap group, the first task remains in the current wave and the
-
-///|
-/// remaining tasks are moved to the next wave after the current last wave.
-pub fn RalphLoop::resolve_scope_conflicts(
-  self : RalphLoop,
-  milestone : @types.Milestone,
-  wave : Int,
-) -> Int {
-  let tasks = milestone.get_wave_tasks(wave)
-  let overlaps = detect_scope_overlaps(tasks)
-  if overlaps.is_empty() {
-    return 0
-  }
-
-  let target_wave = last_wave_number(milestone) + 1
-  let moved_task_ids : Array[String] = []
-  let seen_task_ids : Map[String, Bool] = {}
-  for overlap in overlaps {
-    let (_, task_ids) = overlap
-    for i in 1..<task_ids.length() {
-      let task_id = task_ids[i]
-      if not(seen_task_ids.contains(task_id)) {
-        seen_task_ids[task_id] = true
-        moved_task_ids.push(task_id)
-      }
-    }
-  }
-
-  for task in milestone.tasks {
-    if seen_task_ids.contains(task.id) {
-      task.wave = target_wave
-      emit_info(
-        self,
-        "Moved task \{task.id} to wave \{target_wave} due to scope overlap",
-      )
-    }
-  }
-  moved_task_ids.length()
 }

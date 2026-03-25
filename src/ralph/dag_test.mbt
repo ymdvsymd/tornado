@@ -4,7 +4,6 @@ fn dag_task(id : String, depends_on : Array[String]) -> @types.RalphTask {
   {
     id,
     description: id,
-    wave: 0,
     scope: [],
     depends_on,
     status: @types.TaskStatus::Pending,
@@ -22,7 +21,6 @@ fn dag_task_scoped(
   {
     id,
     description: id,
-    wave: 0,
     scope,
     depends_on,
     status: @types.TaskStatus::Pending,
@@ -252,166 +250,4 @@ test "scope edges integrate with compute_layers to serialize overlapping tasks" 
   inspect(layers_after.get("t2"), content="Some(1)")
   // t3 is independent, stays at layer 0
   inspect(layers_after.get("t3"), content="Some(0)")
-}
-
-///|
-test "build_wave_barriers: creates barriers between consecutive wave groups" {
-  let tasks : Array[@types.RalphTask] = [
-    {
-      id: "t1",
-      description: "setup",
-      wave: 0,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-    {
-      id: "t2",
-      description: "build",
-      wave: 1,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-    {
-      id: "t3",
-      description: "test",
-      wave: 1,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-    {
-      id: "t4",
-      description: "deploy",
-      wave: 2,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-  ]
-  let barriers = @ralph.build_wave_barriers(tasks)
-  // wave 0→1 and wave 1→2: 2 barriers
-  assert_true(barriers.length() == 2)
-  // Barrier 0: wave 0 [t1] → wave 1 [t2, t3]
-  let (prev0, curr0) = barriers[0]
-  assert_true(prev0.length() == 1)
-  assert_true(prev0.contains("t1"))
-  assert_true(curr0.length() == 2)
-  assert_true(curr0.contains("t2"))
-  assert_true(curr0.contains("t3"))
-  // Barrier 1: wave 1 [t2, t3] → wave 2 [t4]
-  let (prev1, curr1) = barriers[1]
-  assert_true(prev1.length() == 2)
-  assert_true(prev1.contains("t2"))
-  assert_true(prev1.contains("t3"))
-  assert_true(curr1.length() == 1)
-  assert_true(curr1.contains("t4"))
-}
-
-///|
-test "build_wave_barriers: no barriers for all-wave-0 tasks" {
-  let tasks = [dag_task("A", []), dag_task("B", []), dag_task("C", [])]
-  let barriers = @ralph.build_wave_barriers(tasks)
-  assert_true(barriers.is_empty())
-}
-
-///|
-test "build_wave_barriers: skips tasks that already have depends_on" {
-  let tasks : Array[@types.RalphTask] = [
-    {
-      id: "t1",
-      description: "setup",
-      wave: 0,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-    {
-      id: "t2",
-      description: "build",
-      wave: 1,
-      scope: [],
-      depends_on: ["t1"],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-    {
-      id: "t3",
-      description: "test",
-      wave: 1,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-  ]
-  let barriers = @ralph.build_wave_barriers(tasks)
-  // t2 has depends_on → excluded from wave groups
-  // Only wave-only tasks: t1 (wave 0), t3 (wave 1) → 1 barrier
-  assert_true(barriers.length() == 1)
-  let (prev, curr) = barriers[0]
-  assert_true(prev.length() == 1)
-  assert_true(prev.contains("t1"))
-  assert_true(curr.length() == 1)
-  assert_true(curr.contains("t3"))
-}
-
-///|
-test "build_wave_barriers integrates with compute_layers for wave ordering" {
-  // Simulates run_dag pipeline: build barriers → inject deps → compute layers
-  let tasks : Array[@types.RalphTask] = [
-    {
-      id: "t1",
-      description: "setup",
-      wave: 0,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-    {
-      id: "t2",
-      description: "build",
-      wave: 1,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-    {
-      id: "t3",
-      description: "deploy",
-      wave: 2,
-      scope: [],
-      depends_on: [],
-      status: @types.TaskStatus::Pending,
-      result: None,
-    },
-  ]
-  let barriers = @ralph.build_wave_barriers(tasks)
-  assert_true(barriers.length() == 2)
-  // Simulate run_dag: apply barrier deps to depends_on for compute_layers
-  for barrier in barriers {
-    let (prev_ids, curr_ids) = barrier
-    for task in tasks {
-      if curr_ids.contains(task.id) {
-        for prev_id in prev_ids {
-          if not(task.depends_on.contains(prev_id)) {
-            task.depends_on.push(prev_id)
-          }
-        }
-      }
-    }
-  }
-  let (layers, cycle_tasks, _) = @ralph.compute_layers(tasks)
-  assert_true(cycle_tasks.is_empty())
-  inspect(layers.get("t1"), content="Some(0)")
-  inspect(layers.get("t2"), content="Some(1)")
-  inspect(layers.get("t3"), content="Some(2)")
 }

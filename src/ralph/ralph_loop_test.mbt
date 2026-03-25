@@ -37,14 +37,12 @@ test "RalphLoop full cycle with single milestone" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Create schema\n2. Write tests",
+    default_response="TASKS:\n1. Create schema\n2. Write tests",
   )
   let builder_mock = @agent.MockBackend::new(
     default_response="Task completed successfully",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -85,7 +83,7 @@ test "RalphLoop dry-run skips planner execution and leaves milestones pending" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Create schema\n2. Write tests",
+    default_response="TASKS:\n1. Create schema\n2. Write tests",
   )
   let builder_mock = @agent.MockBackend::new(default_response="should not run")
   let verifier_mock = @agent.MockBackend::new(default_response="should not run")
@@ -141,12 +139,10 @@ test "planner receives system prompt with brief and completed milestone summarie
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Create schema",
+    default_response="TASKS:\n1. Create schema",
   )
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -195,9 +191,7 @@ test "builder receives system prompt with brief" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -233,9 +227,7 @@ test "completed milestone summary concatenates completed task descriptions" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -263,9 +255,7 @@ test "RalphLoop with pre-planned tasks" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Schema created")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -297,9 +287,7 @@ test "RalphLoop logs resume progress for partially completed milestone" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -344,9 +332,7 @@ test "run_wave skips already-done tasks before submitting to builder" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="fresh result")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -400,9 +386,7 @@ test "run_wave does not emit running logs for already-done tasks" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="fresh result")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -460,9 +444,7 @@ test "run_dag adds scope edges and serializes overlapping tasks" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
   builder_mock.add_response("Update shared helpers", "Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -531,9 +513,7 @@ test "run_dag reverts scope edges that create cycle with explicit deps" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -877,9 +857,7 @@ test "run_dag cycle revert uses inserted_scope_edges not scope_edges to preserve
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -923,76 +901,6 @@ test "run_dag cycle revert uses inserted_scope_edges not scope_edges to preserve
 }
 
 ///|
-test "resolve_scope_conflicts moves conflicting tasks to new wave" {
-  let config = make_ralph_config()
-  let json =
-    #|{
-    #|  "milestones": [
-    #|    {
-    #|      "id": "m1", "goal": "Refactor shared code", "status": "pending",
-    #|      "tasks": [
-    #|        {
-    #|          "id": "m1-t1",
-    #|          "description": "Update shared types",
-    #|          "wave": 0,
-    #|          "scope": ["src/shared.ts", "src/types.ts"],
-    #|          "status": "pending"
-    #|        },
-    #|        {
-    #|          "id": "m1-t2",
-    #|          "description": "Update shared helpers",
-    #|          "wave": 0,
-    #|          "scope": ["src/shared.ts", "src/helpers.ts"],
-    #|          "status": "pending"
-    #|        },
-    #|        {
-    #|          "id": "m1-t3",
-    #|          "description": "Update isolated file",
-    #|          "wave": 0,
-    #|          "scope": ["src/isolated.ts"],
-    #|          "status": "pending"
-    #|        }
-    #|      ]
-    #|    }
-    #|  ]
-    #|}
-  let mgr = @ralph.MilestoneManager::load_from_json(json)
-  let planner_mock = @agent.MockBackend::new(default_response="unused")
-  let builder_mock = @agent.MockBackend::new(default_response="unused")
-  let verifier_mock = @agent.MockBackend::new(default_response="unused")
-  let backends : Map[String, @agent.BoxedBackend] = {}
-  backends["planner"] = planner_mock.boxed()
-  backends["builder"] = builder_mock.boxed()
-  backends["verifier"] = verifier_mock.boxed()
-  let infos : Array[String] = []
-  let callbacks : @types.OrchestratorCallbacks = {
-    on_event: fn(e) {
-      match e {
-        Info(ev) => infos.push(ev.message)
-        _ => ()
-      }
-    },
-    on_save: fn() {  },
-  }
-  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
-  let milestone = mgr.milestones[0]
-
-  let moved = rl.resolve_scope_conflicts(milestone, 0)
-
-  assert_true(moved == 1)
-  inspect(milestone.tasks[0].wave, content="0")
-  inspect(milestone.tasks[1].wave, content="1")
-  inspect(milestone.tasks[2].wave, content="0")
-  assert_true(
-    infos
-    .iter()
-    .any(fn(msg) {
-      msg.contains("Moved task m1-t2") && msg.contains("due to scope overlap")
-    }),
-  )
-}
-
-///|
 test "run_wave with no scope overlaps executes all tasks normally" {
   let config = make_ralph_config()
   let json =
@@ -1023,9 +931,7 @@ test "run_wave with no scope overlaps executes all tasks normally" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done A")
   builder_mock.add_response("Update file B", "Done B")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1048,8 +954,6 @@ test "run_wave with no scope overlaps executes all tasks normally" {
   assert_true(history.length() == 2)
   inspect(history[0].0, content="Update file A")
   inspect(history[1].0, content="Update file B")
-  inspect(mgr.milestones[0].tasks[0].wave, content="0")
-  inspect(mgr.milestones[0].tasks[1].wave, content="0")
   assert_true(
     not(infos.iter().any(fn(msg) { msg.contains("Pre-wave scope check") })),
   )
@@ -1086,9 +990,7 @@ test "run_wave with empty scope arrays skips conflict check" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done A")
   builder_mock.add_response("Run legacy task B", "Done B")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1150,9 +1052,7 @@ test "resume skips already-done milestones" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="fresh result")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1208,19 +1108,19 @@ test "RalphLoop with rework cycle at milestone verification" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Create schema",
+    default_response="TASKS:\n1. Create schema",
   )
-  let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  // Builder returns different results each time to avoid no-change circuit breaker
+  let builder_seq = @agent.SequenceMockBackend::new([
+    "Done v1", "Done v2 reworked", "Done v3 reworked again",
+  ])
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "Security", "<needs_rework>m1-t1: add validation</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
-  backends["builder"] = builder_mock.boxed()
+  backends["builder"] = builder_seq.boxed()
   backends["verifier"] = verifier_mock.boxed()
   let infos : Array[String] = []
   let callbacks : @types.OrchestratorCallbacks = {
@@ -1240,12 +1140,8 @@ test "RalphLoop with rework cycle at milestone verification" {
     .iter()
     .any(fn(m) { m.contains("Rework needed") || m.contains("rework needed") }),
   )
-  // Eventually reaches max rework and accepts
-  assert_true(
-    infos
-    .iter()
-    .any(fn(m) { m.contains("Max rework attempts") || m.contains("complete") }),
-  )
+  // Eventually reaches max rework
+  assert_true(infos.iter().any(fn(m) { m.contains("Max rework attempts") }))
 }
 
 ///|
@@ -1259,7 +1155,7 @@ test "RalphLoop milestone failure at milestone verification" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Create schema",
+    default_response="TASKS:\n1. Create schema",
   )
   let builder_mock = @agent.MockBackend::new(default_response="Done")
   let verifier_mock = @agent.MockBackend::new(
@@ -1352,9 +1248,7 @@ test "RalphLoop multiple milestones" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1368,7 +1262,7 @@ test "RalphLoop multiple milestones" {
 }
 
 ///|
-test "RalphLoop multi-wave execution" {
+test "RalphLoop multi-task DAG execution" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -1378,12 +1272,10 @@ test "RalphLoop multi-wave execution" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Setup\n\nWAVE 1:\n1. Build\n2. Test",
+    default_response="TASKS:\n1. Setup\n2. Build\n3. Test",
   )
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1401,9 +1293,7 @@ test "RalphLoop multi-wave execution" {
   let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
   rl.run()
   inspect(mgr.milestones[0].status, content="Done")
-  // Should execute DAG (layers computed from wave-based parse)
   assert_true(infos.iter().any(fn(m) { m.contains("Executing DAG for m1") }))
-  // Builder should have been called 3 times (1 in layer 0 + 2 in layer 1)
   assert_true(builder_mock.get_history().length() == 3)
 }
 
@@ -1424,9 +1314,7 @@ test "RalphLoop verifies all 4 perspectives after waves complete" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1474,9 +1362,7 @@ test "RalphLoop multi-wave full cycle verifies all 4 perspectives once at milest
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1519,9 +1405,7 @@ test "RalphLoop reworks milestone tasks during milestone verification" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   // First verification: Security perspective returns needs_rework
   // "Done v1" uniquely matches the first run's result content
   verifier_mock.add_response(
@@ -1579,9 +1463,7 @@ test "RalphLoop milestone verification rework cycle retries and then completes" 
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   // "Done v1" uniquely matches first-run results, triggers rework
   verifier_mock.add_response(
     "Done v1", "<needs_rework>m1-t1: missing end-to-end behavior</needs_rework>",
@@ -1651,9 +1533,7 @@ test "RalphLoop fails milestone when goal alignment verification fails" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "## Review Focus: Goal Alignment", "<milestone_failed>Milestone goal was not achieved</milestone_failed>",
   )
@@ -1731,14 +1611,12 @@ test "rework_tasks passes targeted feedback to specific task only" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "### Task: m1-t1\nDone v1\n\n### Task: m1-t2\nDone v1\n\n## Review Focus: Security",
     "<needs_rework>m1-t1: fix error handling</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  verifier_mock.add_response("REWORKED", "<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1785,14 +1663,12 @@ test "rework_tasks resets all done tasks when feedback has no task ID (fallback)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "### Task: m1-t1\nDone v1\n\n### Task: m1-t2\nDone v1\n\n## Review Focus: Security",
     "<needs_rework>general quality issues</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  verifier_mock.add_response("REWORKED", "<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1850,9 +1726,7 @@ test "rework_tasks distributes per-task feedback without cross-contamination" {
   builder_mock.add_response(
     "[Security] missing edge cases", "Done v2 REWORKED-T2",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "### Task: m1-t1\nDone v1\n\n### Task: m1-t2\nDone v1\n\n## Review Focus: Code Quality",
     "<needs_rework>m1-t1: add validation</needs_rework>",
@@ -1861,7 +1735,7 @@ test "rework_tasks distributes per-task feedback without cross-contamination" {
     "### Task: m1-t1\nDone v1\n\n### Task: m1-t2\nDone v1\n\n## Review Focus: Security",
     "<needs_rework>m1-t2: missing edge cases</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  verifier_mock.add_response("REWORKED", "<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1913,13 +1787,11 @@ test "rework prompt has correct format with description and feedback" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "### Task: m1-t1\nDone v1\n\n## Review Focus: Code Quality", "<needs_rework>m1-t1: add input validation</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  verifier_mock.add_response("REWORKED", "<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -1959,14 +1831,12 @@ test "rework_tasks matches space-delimited feedback (no colon)" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "### Task: m1-t1\nDone v1\n\n### Task: m1-t2\nDone v1\n\n## Review Focus: Security",
     "<needs_rework>m1-t1 needs better validation</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  verifier_mock.add_response("REWORKED", "<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2018,9 +1888,7 @@ test "tornado-1fy: detect file conflicts between parallel builders in same wave"
   builder_mock.add_response(
     "Fix prettier via env variable", "Done\nFILES_CHANGED: package.json, .env",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2076,9 +1944,7 @@ test "tornado-1fy: no false positive when parallel builders edit different files
   builder_mock.add_response(
     "Build logging module", "Done\nFILES_CHANGED: src/logging.ts",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2131,14 +1997,13 @@ test "tornado-1fy: extract_changed_files returns empty for no FILES_CHANGED" {
 }
 
 ///|
-test "tornado-1fy: detect_wave_file_conflicts finds overlapping files" {
+test "tornado-1fy: detect_file_conflicts finds overlapping files" {
   let results : Array[(@types.RalphTask, Array[String])] = []
   let t1 : @types.RalphTask = {
     id: "m1-t1",
     description: "task 1",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Done,
     result: None,
   }
@@ -2147,13 +2012,12 @@ test "tornado-1fy: detect_wave_file_conflicts finds overlapping files" {
     description: "task 2",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Done,
     result: None,
   }
   results.push((t1, ["package.json", "src/a.ts"]))
   results.push((t2, ["package.json", "src/b.ts"]))
-  let conflicts = @ralph.detect_wave_file_conflicts(results)
+  let conflicts = @ralph.detect_file_conflicts(results)
   assert_true(conflicts.length() == 1)
   let (file, task_ids) = conflicts[0]
   inspect(file, content="package.json")
@@ -2162,14 +2026,13 @@ test "tornado-1fy: detect_wave_file_conflicts finds overlapping files" {
 }
 
 ///|
-test "tornado-1fy: detect_wave_file_conflicts returns empty for no overlaps" {
+test "tornado-1fy: detect_file_conflicts returns empty for no overlaps" {
   let results : Array[(@types.RalphTask, Array[String])] = []
   let t1 : @types.RalphTask = {
     id: "m1-t1",
     description: "task 1",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Done,
     result: None,
   }
@@ -2178,13 +2041,12 @@ test "tornado-1fy: detect_wave_file_conflicts returns empty for no overlaps" {
     description: "task 2",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Done,
     result: None,
   }
   results.push((t1, ["src/a.ts"]))
   results.push((t2, ["src/b.ts"]))
-  let conflicts = @ralph.detect_wave_file_conflicts(results)
+  let conflicts = @ralph.detect_file_conflicts(results)
   assert_true(conflicts.is_empty())
 }
 
@@ -2196,7 +2058,6 @@ test "detect_scope_overlaps finds overlapping scoped files" {
     description: "task 1",
     scope: ["src/shared.ts", "src/a.ts"],
     depends_on: [],
-    wave: 0,
     status: Pending,
     result: None,
   }
@@ -2205,7 +2066,6 @@ test "detect_scope_overlaps finds overlapping scoped files" {
     description: "task 2",
     scope: ["src/shared.ts", "src/b.ts"],
     depends_on: [],
-    wave: 0,
     status: Pending,
     result: None,
   }
@@ -2228,7 +2088,6 @@ test "detect_scope_overlaps returns empty for no overlaps" {
     description: "task 1",
     scope: ["src/a.ts"],
     depends_on: [],
-    wave: 0,
     status: Pending,
     result: None,
   }
@@ -2237,7 +2096,6 @@ test "detect_scope_overlaps returns empty for no overlaps" {
     description: "task 2",
     scope: ["src/b.ts"],
     depends_on: [],
-    wave: 0,
     status: Pending,
     result: None,
   }
@@ -2255,7 +2113,6 @@ test "detect_scope_overlaps skips tasks with empty scope" {
     description: "task 1",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Pending,
     result: None,
   }
@@ -2264,7 +2121,6 @@ test "detect_scope_overlaps skips tasks with empty scope" {
     description: "task 2",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Pending,
     result: None,
   }
@@ -2302,9 +2158,7 @@ test "run_wave with 3 parallel builders causing multi-file conflicts" {
   builder_mock.add_response(
     "Migrate config format", "Done\nFILES_CHANGED: src/config.ts, src/parser.ts",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2461,9 +2315,7 @@ test "run_wave fails builder result when reported files are missing from worktre
   let builder_mock = @agent.MockBackend::new(
     default_response="Done\nFILES_CHANGED: does-not-exist.txt",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2512,9 +2364,7 @@ test "validate_builder_result fails on partial file missing (whirlwind-aps)" {
   let builder_mock = @agent.MockBackend::new(
     default_response="Done\nFILES_CHANGED: scripts/query.py, config/snowflake.yml",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2578,9 +2428,7 @@ test "run_dag skips already-done layers and dispatches only pending tasks" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="fresh result")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2636,9 +2484,7 @@ test "run_dag resumes with depends_on: done task propagates and unblocks pending
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="fresh result")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2731,9 +2577,7 @@ test "run_dag returns false when no builder backend is available" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["verifier"] = verifier_mock.boxed()
@@ -2774,9 +2618,7 @@ test "verify_milestone fails after rework when re-verify returns milestone_faile
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   // First verification (attempt 0): needs_rework
   verifier_mock.add_response(
     "Done v1", "<needs_rework>m1-t1: missing error handling</needs_rework>",
@@ -2819,14 +2661,13 @@ test "verify_milestone fails after rework when re-verify returns milestone_faile
 }
 
 ///|
-test "detect_wave_file_conflicts with 3 tasks all sharing the same file" {
+test "detect_file_conflicts with 3 tasks all sharing the same file" {
   let results : Array[(@types.RalphTask, Array[String])] = []
   let t1 : @types.RalphTask = {
     id: "m1-t1",
     description: "task 1",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Done,
     result: None,
   }
@@ -2835,7 +2676,6 @@ test "detect_wave_file_conflicts with 3 tasks all sharing the same file" {
     description: "task 2",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Done,
     result: None,
   }
@@ -2844,14 +2684,13 @@ test "detect_wave_file_conflicts with 3 tasks all sharing the same file" {
     description: "task 3",
     scope: [],
     depends_on: [],
-    wave: 0,
     status: Done,
     result: None,
   }
   results.push((t1, ["shared.ts", "a.ts"]))
   results.push((t2, ["shared.ts", "b.ts"]))
   results.push((t3, ["shared.ts", "c.ts"]))
-  let conflicts = @ralph.detect_wave_file_conflicts(results)
+  let conflicts = @ralph.detect_file_conflicts(results)
   // shared.ts should be the only conflict, with all 3 task IDs
   assert_true(conflicts.length() == 1)
   let (file, task_ids) = conflicts[0]
@@ -2901,9 +2740,7 @@ test "single task wave does not trigger conflict detection" {
   let builder_mock = @agent.MockBackend::new(
     default_response="Done\nFILES_CHANGED: package.json, src/config.ts",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2955,9 +2792,7 @@ test "whirlwind-4hy: builder system prompt instructs to fix all compile errors" 
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -2987,14 +2822,12 @@ test "whirlwind-khq: resume retries failed milestones instead of skipping them" 
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   assert_true(mgr.milestones[0].status is @types.MilestoneStatus::Failed(_))
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Create schema\nSCOPE: src/schema.mbt",
+    default_response="TASKS:\n1. Create schema\nSCOPE: src/schema.mbt",
   )
   let builder_mock = @agent.MockBackend::new(
     default_response="Task completed successfully",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3026,14 +2859,12 @@ test "whirlwind-261: planner retries when first attempt produces 0 tasks" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_seq = @agent.SequenceMockBackend::new([
-    "(session exhausted)", "WAVE 0:\n1. Create schema\nSCOPE: src/schema.mbt",
+    "(session exhausted)", "TASKS:\n1. Create schema\nSCOPE: src/schema.mbt",
   ])
   let builder_mock = @agent.MockBackend::new(
     default_response="Task completed successfully",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_seq.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3108,9 +2939,7 @@ test "whirlwind-4hy: builder system prompt with empty brief still has compile er
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3141,13 +2970,11 @@ test "whirlwind-4hy: rework prompt includes compile error priority when feedback
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 FIXED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "Done v1", "<needs_rework>m1-t1: compile error in src/auth.mbt - type mismatch</needs_rework>",
   )
-  verifier_mock.add_response("FIXED", "<wave_approved>")
+  verifier_mock.add_response("FIXED", "<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3179,13 +3006,11 @@ test "whirlwind-d35: rework prompt includes scope limitation" {
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done v1")
   builder_mock.add_response("Feedback from verifier", "Done v2 REWORKED")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   verifier_mock.add_response(
     "### Task: m1-t1\nDone v1\n\n## Review Focus: Code Quality", "<needs_rework>m1-t1: add input validation</needs_rework>",
   )
-  verifier_mock.add_response("REWORKED", "<wave_approved>")
+  verifier_mock.add_response("REWORKED", "<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3238,9 +3063,7 @@ test "E2E DAG: planner outputs DEPENDS_ON format and DAG dispatches in correct l
   builder_mock.add_response("handlers", "handlers done")
   builder_mock.add_response("authentication", "auth done")
   builder_mock.add_response("integration", "tests done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3352,9 +3175,7 @@ test "E2E DAG: planner outputs DEPENDS_ON format with max_in_flight=2 batches di
     #|DEPENDS_ON: (none)
   let planner_mock = @agent.MockBackend::new(default_response=plan_output)
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3427,9 +3248,7 @@ test "E2E DAG: max_in_flight=2 mid-batch ready resolution dispatches dependent i
     #|DEPENDS_ON: 2
   let planner_mock = @agent.MockBackend::new(default_response=plan_output)
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3559,9 +3378,7 @@ test "E2E DAG: cascade_fail propagates failure to transitive dependents via expl
   let planner_mock = @agent.MockBackend::new(default_response=plan_output)
   // Builder always fails — A is the only task dispatched, so it fails
   let builder_mock = @agent.FailingMockBackend::new(error_msg="build error")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3643,94 +3460,7 @@ test "E2E DAG: cascade_fail propagates failure to transitive dependents via expl
 }
 
 ///|
-test "E2E DAG: cascade_fail propagates failure through wave barriers" {
-  let config = make_ralph_config()
-  // Pre-existing WAVE tasks: A in wave 0, B and C in wave 1
-  // Wave barriers create implicit deps: wave 0 → wave 1
-  // If A fails, B and C should be cascade-failed via wave barrier
-  let json =
-    #|{
-    #|  "milestones": [
-    #|    {
-    #|      "id": "m1", "goal": "Build with waves", "status": "pending",
-    #|      "tasks": [
-    #|        { "id": "m1-t1", "description": "Wave0 root task", "wave": 0, "status": "pending" },
-    #|        { "id": "m1-t2", "description": "Wave1 child task", "wave": 1, "status": "pending" },
-    #|        { "id": "m1-t3", "description": "Wave1 sibling task", "wave": 1, "status": "pending" }
-    #|      ]
-    #|    }
-    #|  ]
-    #|}
-  let mgr = @ralph.MilestoneManager::load_from_json(json)
-  let planner_mock = @agent.MockBackend::new(default_response="unused")
-  // Builder always fails — wave 0 task fails
-  let builder_mock = @agent.FailingMockBackend::new(
-    error_msg="wave build error",
-  )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
-  let backends : Map[String, @agent.BoxedBackend] = {}
-  backends["planner"] = planner_mock.boxed()
-  backends["builder"] = builder_mock.boxed()
-  backends["verifier"] = verifier_mock.boxed()
-  let infos : Array[String] = []
-  let callbacks : @types.OrchestratorCallbacks = {
-    on_event: fn(e) {
-      match e {
-        Info(ev) => infos.push(ev.message)
-        _ => ()
-      }
-    },
-    on_save: fn() {  },
-  }
-  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
-  rl.run()
-
-  let tasks = mgr.milestones[0].tasks
-  assert_true(tasks.length() == 3)
-
-  // Wave 0 task: direct failure from builder
-  assert_true(tasks[0].status is Failed(_))
-
-  // Wave 1 tasks: cascade-failed via wave barrier
-  assert_true(tasks[1].status is Failed(_))
-  assert_true(tasks[2].status is Failed(_))
-
-  // Only wave 0 task was dispatched
-  let dispatch_msgs : Array[String] = infos
-    .iter()
-    .filter(fn(msg) { msg.contains("Dispatching task") })
-    .collect()
-  assert_true(dispatch_msgs.length() == 1)
-  assert_true(dispatch_msgs[0].contains("m1-t1"))
-
-  // Wave barriers were applied (confirming barrier path is active)
-  assert_true(infos.iter().any(fn(msg) { msg.contains("wave barriers") }))
-
-  // Cascade-fail messages for wave 1 tasks reference the failed wave 0 task
-  assert_true(
-    infos
-    .iter()
-    .any(fn(msg) {
-      msg.contains("m1-t2") &&
-      msg.contains("cascade-failed") &&
-      msg.contains("m1-t1")
-    }),
-  )
-  assert_true(
-    infos
-    .iter()
-    .any(fn(msg) {
-      msg.contains("m1-t3") &&
-      msg.contains("cascade-failed") &&
-      msg.contains("m1-t1")
-    }),
-  )
-}
-
-///|
-test "E2E backward compat: WAVE format planner output still works with DAG execution" {
+test "E2E: planner output uses TASKS format with DAG execution" {
   let config = make_ralph_config()
   let json =
     #|{
@@ -3741,12 +3471,10 @@ test "E2E backward compat: WAVE format planner output still works with DAG execu
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   // Planner uses legacy WAVE format
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Setup database\n\nWAVE 1:\n1. Build handlers\n2. Write tests",
+    default_response="TASKS:\n1. Setup database\n2. Build handlers\n3. Write tests",
   )
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3768,42 +3496,27 @@ test "E2E backward compat: WAVE format planner output still works with DAG execu
   inspect(mgr.milestones[0].status, content="Done")
   inspect(rl.current_phase, content="AllComplete")
 
-  // Tasks parsed correctly: 3 tasks with wave 0 and wave 1
+  // Tasks parsed correctly
   let tasks = mgr.milestones[0].tasks
   assert_true(tasks.length() == 3)
   inspect(tasks[0].description, content="Setup database")
-  assert_true(tasks[0].wave == 0)
   inspect(tasks[1].description, content="Build handlers")
-  assert_true(tasks[1].wave == 1)
   inspect(tasks[2].description, content="Write tests")
-  assert_true(tasks[2].wave == 1)
-
-  // Wave barriers (D2) do NOT modify depends_on — ordering is virtual
-  assert_true(tasks[0].depends_on.is_empty()) // wave 0: no deps
-  assert_true(tasks[1].depends_on.is_empty()) // wave 1: no explicit deps
-  assert_true(tasks[2].depends_on.is_empty()) // wave 1: no explicit deps
 
   // DAG execution was used
   assert_true(
     infos.iter().any(fn(msg) { msg.contains("Executing DAG for m1") }),
   )
-  // Wave barriers were applied
-  assert_true(infos.iter().any(fn(msg) { msg.contains("wave barriers") }))
 
   // All 3 builder calls made
   assert_true(builder_mock.get_history().length() == 3)
 
-  // Wave ordering preserved: wave 0 task dispatched before wave 1 tasks
+  // All tasks dispatched
   let dispatch_msgs : Array[String] = infos
     .iter()
     .filter(fn(msg) { msg.contains("Dispatching task") })
     .collect()
   assert_true(dispatch_msgs.length() == 3)
-  // First dispatch is wave 0 task
-  assert_true(dispatch_msgs[0].contains(tasks[0].id))
-  // Next dispatches are wave 1 tasks
-  assert_true(dispatch_msgs[1].contains(tasks[1].id))
-  assert_true(dispatch_msgs[2].contains(tasks[2].id))
 
   // All tasks completed
   for task in tasks {
@@ -3812,9 +3525,9 @@ test "E2E backward compat: WAVE format planner output still works with DAG execu
 }
 
 ///|
-test "E2E backward compat: pre-existing WAVE tasks in JSON dispatched via DAG" {
+test "E2E: pre-existing tasks in JSON dispatched via DAG" {
   let config = make_ralph_config()
-  // Tasks already exist in milestones.json (loaded from disk), using wave-only format
+  // Tasks already exist in milestones.json (loaded from disk)
   let json =
     #|{
     #|  "milestones": [
@@ -3831,9 +3544,7 @@ test "E2E backward compat: pre-existing WAVE tasks in JSON dispatched via DAG" {
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(default_response="unused")
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3869,19 +3580,6 @@ test "E2E backward compat: pre-existing WAVE tasks in JSON dispatched via DAG" {
   for task in mgr.milestones[0].tasks {
     inspect(task.status, content="Done")
   }
-
-  // Wave barriers (D2) enforce ordering: wave 1 task dispatched after wave 0 tasks
-  assert_true(infos.iter().any(fn(msg) { msg.contains("wave barriers") }))
-  let dispatch_msgs : Array[String] = infos
-    .iter()
-    .filter(fn(msg) { msg.contains("Dispatching task") })
-    .collect()
-  assert_true(dispatch_msgs.length() == 3)
-  // First two dispatches are wave 0 tasks
-  assert_true(dispatch_msgs[0].contains("m1-t1"))
-  assert_true(dispatch_msgs[1].contains("m1-t2"))
-  // Third dispatch is wave 1 task (after wave 0 tasks complete)
-  assert_true(dispatch_msgs[2].contains("m1-t3"))
 }
 
 ///|
@@ -3908,9 +3606,7 @@ test "E2E DAG: default max_in_flight=1 dispatches strictly serially" {
     #|DEPENDS_ON: (none)
   let planner_mock = @agent.MockBackend::new(default_response=plan_output)
   let builder_mock = @agent.MockBackend::new(default_response="Done")
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -3983,14 +3679,12 @@ test "Info events from handle_event carry agent_id" {
     #|}
   let mgr = @ralph.MilestoneManager::load_from_json(json)
   let planner_mock = @agent.MockBackend::new(
-    default_response="WAVE 0:\n1. Build component",
+    default_response="TASKS:\n1. Build component",
   )
   let builder_mock = @agent.MockBackend::new(
     default_response="Task completed successfully",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -4206,7 +3900,7 @@ test "normal rework cycle still works when changes are made" {
   let verifier_seq = @agent.SequenceMockBackend::new([
     "<needs_rework>m1-t1: missing error handling</needs_rework>", "<needs_rework>m1-t1: missing error handling</needs_rework>",
     "<needs_rework>m1-t1: missing error handling</needs_rework>", "<needs_rework>m1-t1: missing error handling</needs_rework>",
-    "<wave_approved>", "<wave_approved>", "<wave_approved>", "<wave_approved>",
+    "<approved>", "<approved>", "<approved>", "<approved>",
   ])
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
@@ -4278,9 +3972,7 @@ test "builder task retries on server error and succeeds" {
     error_msg="Internal server error",
     success_response="Task completed successfully",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -4330,9 +4022,7 @@ test "builder task fails after max retries on persistent server error" {
     error_msg="Internal server error",
     success_response="never reached",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()
@@ -4379,9 +4069,7 @@ test "builder task does not retry on client error (4xx)" {
   let builder_mock = @agent.FailingMockBackend::new(
     error_msg="Bad request: invalid prompt format",
   )
-  let verifier_mock = @agent.MockBackend::new(
-    default_response="<wave_approved>",
-  )
+  let verifier_mock = @agent.MockBackend::new(default_response="<approved>")
   let backends : Map[String, @agent.BoxedBackend] = {}
   backends["planner"] = planner_mock.boxed()
   backends["builder"] = builder_mock.boxed()

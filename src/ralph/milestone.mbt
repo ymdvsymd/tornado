@@ -150,7 +150,6 @@ fn parse_milestone(json : Json) -> @types.Milestone {
 fn parse_ralph_task(json : Json) -> @types.RalphTask {
   let id = @util.get_string(json, "id", "")
   let description = @util.get_string(json, "description", "")
-  let wave = @util.get_int(json, "wave", 0)
   let status_str = @util.get_string(json, "status", "pending")
   let status : @types.TaskStatus = match status_str {
     "in_progress" => Pending
@@ -200,7 +199,7 @@ fn parse_ralph_task(json : Json) -> @types.RalphTask {
       }
     _ => []
   }
-  { id, description, wave, scope, depends_on, status, result }
+  { id, description, scope, depends_on, status, result }
 }
 
 ///|
@@ -243,7 +242,6 @@ fn ralph_task_to_json_value(t : @types.RalphTask) -> Json {
   let obj : Map[String, Json] = {}
   obj["id"] = t.id.to_json()
   obj["description"] = t.description.to_json()
-  obj["wave"] = t.wave.to_json()
   obj["status"] = status_str.to_json()
   match failure_reason {
     Some(reason) => obj["failure_reason"] = reason.to_json()
@@ -293,7 +291,7 @@ fn extract_task_num(id : String) -> Int {
 }
 
 ///|
-/// Parse planner text output in TASKS/DEPENDS_ON format (with WAVE backward compat)
+/// Parse planner text output in TASKS/DEPENDS_ON format
 fn parse_plan_text(
   mgr : MilestoneManager,
   output : String,
@@ -301,7 +299,6 @@ fn parse_plan_text(
 ) -> Array[@types.RalphTask] {
   let tasks : Array[@types.RalphTask] = []
   let start_task_num = mgr.next_task_id
-  let mut current_wave = 0
   let mut saw_header = false
   let mut found_tasks = false
   let lines = @util.split_lines(output)
@@ -319,20 +316,9 @@ fn parse_plan_text(
     }
     // Strip markdown formatting before checking headers
     let stripped = strip_markdown_prefix(trimmed)
-    // Check for "TASKS:" header (DAG mode)
+    // Check for "TASKS:" header
     if has_tasks_prefix(stripped) {
       saw_header = true
-      current_wave = 0
-      i = i + 1
-      continue
-    }
-    // Check for "WAVE N:" header (legacy mode)
-    if has_wave_prefix(stripped) {
-      let num = parse_wave_number(stripped)
-      if num >= 0 {
-        current_wave = num
-        saw_header = true
-      }
       i = i + 1
       continue
     }
@@ -348,7 +334,6 @@ fn parse_plan_text(
       tasks.push({
         id,
         description: desc,
-        wave: current_wave,
         scope: [],
         depends_on: [],
         status: @types.TaskStatus::Pending,
@@ -409,35 +394,6 @@ fn strip_markdown_prefix(s : String) -> String {
     result = String::from_array(result.to_array()[2:])
   }
   result
-}
-
-///|
-fn has_wave_prefix(s : String) -> Bool {
-  s.has_prefix("WAVE ") || s.has_prefix("wave ") || s.has_prefix("Wave ")
-}
-
-///|
-fn parse_wave_number(s : String) -> Int {
-  // Extract number after "WAVE "
-  let chars = s.to_array()
-  let mut i = 5 // after "WAVE "
-  let mut num = 0
-  let mut found = false
-  while i < chars.length() {
-    let ch = chars[i]
-    if ch >= '0' && ch <= '9' {
-      num = num * 10 + (ch.to_int() - '0'.to_int())
-      found = true
-    } else {
-      break
-    }
-    i += 1
-  }
-  if found {
-    num
-  } else {
-    -1
-  }
 }
 
 ///|

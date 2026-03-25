@@ -20,7 +20,7 @@ pub fn VerifierAgent::build_perspective_prompt(
   perspective : @prompts.Perspective,
   milestone : @types.Milestone,
   wave : Int,
-  wave_results : Array[(String, String)],
+  task_results : Array[(String, String)],
   project_context : String,
 ) -> String {
   let lang_instruction = if self.lang == "ja" {
@@ -46,7 +46,7 @@ pub fn VerifierAgent::build_perspective_prompt(
     buf.write_string("\n\n")
   }
   buf.write_string("## Wave Results\n")
-  for pair in wave_results {
+  for pair in task_results {
     buf.write_string("### Task: ")
     buf.write_string(pair.0)
     buf.write_string("\n")
@@ -77,7 +77,7 @@ pub fn VerifierAgent::build_perspective_prompt(
   buf.write_string(
     "\n## Output Format\n" +
     "Use exactly one of these tags:\n" +
-    "- <wave_approved> if all tasks pass verification\n" +
+    "- <approved> if all tasks pass verification\n" +
     "- <needs_rework>task_id: reason</needs_rework> for tasks that need fixes\n" +
     "- <milestone_failed>reason</milestone_failed> if the milestone cannot be achieved\n",
   )
@@ -107,8 +107,8 @@ pub fn VerifierAgent::parse_verdict(
       }
     None => ()
   }
-  // Check for <wave_approved>
-  if output.contains("<wave_approved>") {
+  // Check for <approved>
+  if output.contains("<approved>") {
     return Approved
   }
   // No recognized tags found — treat as verification failure
@@ -121,7 +121,7 @@ pub fn VerifierAgent::verify(
   self : VerifierAgent,
   milestone : @types.Milestone,
   wave : Int,
-  wave_results : Array[(String, String)],
+  task_results : Array[(String, String)],
   backend : @agent.BoxedBackend,
   project_context : String,
   perspectives? : Array[@prompts.Perspective] = [
@@ -136,7 +136,7 @@ pub fn VerifierAgent::verify(
   for perspective in perspectives {
     on_event(Info("Verifying perspective: " + perspective.to_string()))
     let prompt = self.build_perspective_prompt(
-      perspective, milestone, wave, wave_results, project_context,
+      perspective, milestone, wave, task_results, project_context,
     )
     let system_prompt = "You are a verification agent focusing on " +
       perspective.to_string() +
