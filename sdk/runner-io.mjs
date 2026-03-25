@@ -14,7 +14,7 @@ export function writeJsonl(event, stream = process.stdout) {
 export function createLogger(tag, stream = process.stderr) {
   const logFile = process.env.WHIRLWIND_LOG_FILE || "";
   return function log(message) {
-    const line = `[${tag}] ${message}\n`;
+    const line = `[${nowTimestamp()}] [${tag}] ${message}\n`;
     stream.write(line);
     if (logFile) {
       try {

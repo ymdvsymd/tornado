@@ -97,6 +97,56 @@ test("createLogger writes to log file when WHIRLWIND_LOG_FILE is set (whirlwind-
   }
 });
 
+// whirlwind-8uz: createLogger output includes HH:MM:SS timestamp
+test("createLogger prepends [HH:MM:SS] timestamp to log lines (whirlwind-8uz)", () => {
+  const stderrChunks = [];
+  const fakeStderr = { write: (chunk) => stderrChunks.push(chunk) };
+  const log = createLogger("Claude", fakeStderr);
+
+  log("Task started: test");
+
+  assert.equal(stderrChunks.length, 1);
+  // Must match [HH:MM:SS] [Claude] Task started: test
+  assert.match(
+    stderrChunks[0],
+    /^\[\d{2}:\d{2}:\d{2}\] \[Claude\] Task started: test\n$/,
+  );
+});
+
+// whirlwind-8uz: createLogger timestamp is NOT duplicated when writing to log file
+test("createLogger log file also gets [HH:MM:SS] timestamp (whirlwind-8uz)", () => {
+  const logFile = path.join(os.tmpdir(), `whirlwind-ts-test-${Date.now()}.log`);
+  const origEnv = process.env.WHIRLWIND_LOG_FILE;
+  try {
+    process.env.WHIRLWIND_LOG_FILE = logFile;
+    const stderrChunks = [];
+    const fakeStderr = { write: (chunk) => stderrChunks.push(chunk) };
+    const log = createLogger("Claude", fakeStderr);
+
+    log("Result: success");
+
+    // stderr and file must contain exactly one timestamp each
+    const content = fs.readFileSync(logFile, "utf-8");
+    const tsPattern = /\[\d{2}:\d{2}:\d{2}\]/g;
+    assert.equal(
+      (stderrChunks[0].match(tsPattern) || []).length,
+      1,
+      "stderr should have exactly one timestamp",
+    );
+    assert.equal(
+      (content.match(tsPattern) || []).length,
+      1,
+      "log file should have exactly one timestamp",
+    );
+  } finally {
+    process.env.WHIRLWIND_LOG_FILE = origEnv || "";
+    if (origEnv === undefined) delete process.env.WHIRLWIND_LOG_FILE;
+    try {
+      fs.unlinkSync(logFile);
+    } catch {}
+  }
+});
+
 // whirlwind-08x: createLogger does NOT write to file when WHIRLWIND_LOG_FILE is unset
 test("createLogger does not write to file when WHIRLWIND_LOG_FILE is unset (whirlwind-08x)", () => {
   const origEnv = process.env.WHIRLWIND_LOG_FILE;
