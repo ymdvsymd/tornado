@@ -74,6 +74,7 @@ pub impl Eq for AgentStatus
 pub impl Show for AgentStatus
 
 pub(all) struct InfoEvent {
+  agent_id : String
   message : String
 }
 

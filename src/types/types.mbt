@@ -168,6 +168,7 @@ pub(all) struct SessionCompleteEvent {
 ///|
 /// Event data for info messages
 pub(all) struct InfoEvent {
+  agent_id : String
   message : String
 }
 

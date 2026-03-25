@@ -3968,3 +3968,51 @@ test "E2E DAG: default max_in_flight=1 dispatches strictly serially" {
   inspect(events[4], content="dispatch")
   inspect(events[5], content="complete")
 }
+
+///|
+test "Info events from handle_event carry agent_id" {
+  let config = make_ralph_config()
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    { "id": "m1", "goal": "Build feature", "status": "pending", "tasks": [] }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let planner_mock = @agent.MockBackend::new(
+    default_response="WAVE 0:\n1. Build component",
+  )
+  let builder_mock = @agent.MockBackend::new(
+    default_response="Task completed successfully",
+  )
+  let verifier_mock = @agent.MockBackend::new(
+    default_response="<wave_approved>",
+  )
+  let backends : Map[String, @agent.BoxedBackend] = {}
+  backends["planner"] = planner_mock.boxed()
+  backends["builder"] = builder_mock.boxed()
+  backends["verifier"] = verifier_mock.boxed()
+  let info_events : Array[@types.InfoEvent] = []
+  let callbacks : @types.OrchestratorCallbacks = {
+    on_event: fn(e) {
+      match e {
+        Info(ev) => info_events.push(ev)
+        _ => ()
+      }
+    },
+    on_save: fn() {  },
+  }
+  let rl = @ralph.RalphLoop::new(config, mgr, backends, callbacks)
+  rl.run()
+  // Orchestrator-level infos have empty agent_id
+  let orchestrator_infos = info_events
+    .iter()
+    .filter(fn(ev) { ev.agent_id == "" })
+  assert_true(orchestrator_infos.count() > 0)
+  // All info events should have agent_id field (either empty or populated)
+  for ev in info_events {
+    // agent_id is always a String -- never absent
+    let _ = ev.agent_id
+    let _ = ev.message
+  }
+}

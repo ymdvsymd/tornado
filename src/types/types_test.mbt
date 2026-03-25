@@ -56,7 +56,7 @@ test "OrchestratorCallbacks::noop does not panic" {
     PhaseChange({ session_id: "s1", phase: @types.OrchestratorPhase::Executing }),
   )
   cb.emit(SessionComplete({ session_id: "s1" }))
-  cb.emit(Info({ message: "hello" }))
+  cb.emit(Info({ agent_id: "", message: "hello" }))
   (cb.on_save)()
 }
 
@@ -74,7 +74,7 @@ test "OrchestratorCallbacks unified event listener carries correct values" {
     on_save: fn() {  },
   }
   callbacks.emit(AgentOutput({ agent_id: "dev-1", line: "building..." }))
-  callbacks.emit(Info({ message: "started" }))
+  callbacks.emit(Info({ agent_id: "", message: "started" }))
   inspect(outputs[0], content="dev-1:building...")
   inspect(outputs[1], content="info:started")
 }

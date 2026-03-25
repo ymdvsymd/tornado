@@ -1,16 +1,11 @@
 import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
-import { spawn } from "node:child_process";
 import { truncate, collapseWhitespace } from "./runner-io.mjs";
-const DEFAULT_QUERY_TIMEOUT_MS = 30_000;
-export function createClaudeAdapter(deps = {}) {
+export function createClaudeAdapter() {
   const state = {
     lastStatus: undefined,
     lastToolProgressById: new Map(),
     streamBlocks: new Map(),
   };
-  const queryFn = deps.queryFn || ((opts) => sdkQuery(opts));
-  const cliFallbackFn = deps.cliFallbackFn || defaultCliFallback;
-  const timeoutMs = deps.queryTimeoutMs ?? DEFAULT_QUERY_TIMEOUT_MS;
   return {
     tag: "Claude",
     async start(opts) {
@@ -18,25 +13,15 @@ export function createClaudeAdapter(deps = {}) {
       debugClaude(
         `start: cwd=${String(queryOpts.cwd || process.cwd())} model=${opts.model || "default"} resume=${opts.sessionId || "new"}`,
       );
-      debugClaude("start: calling query() with timeout detection");
-      const { stream, usedFallback } = await startWithTimeout(
-        queryFn,
-        cliFallbackFn,
-        opts,
-        queryOpts,
-        timeoutMs,
-      );
-      const initLogs = [];
-      if (usedFallback) {
-        initLogs.push(
-          `SDK query() timed out after ${timeoutMs}ms, falling back to CLI streaming`,
-        );
-      }
-      debugClaude(`start: stream ready (fallback=${String(usedFallback)})`);
+      debugClaude("start: calling query()");
+      const stream = sdkQuery({
+        prompt: opts.prompt,
+        options: queryOpts,
+      });
+      debugClaude("start: stream ready");
       return {
         sessionId: opts.sessionId || "",
         stream: withClaudeDebugStream(stream),
-        initLogs: initLogs.length > 0 ? initLogs : undefined,
       };
     },
     emit(raw) {
@@ -73,134 +58,6 @@ function withClaudeDebugStream(stream) {
 function debugClaude(message) {
   if (!claudeDebugEnabled) return;
   process.stderr.write(`[ClaudeAdapterDebug] ${message}\n`);
-}
-async function startWithTimeout(
-  queryFn,
-  cliFallbackFn,
-  opts,
-  queryOpts,
-  timeoutMs,
-) {
-  debugClaude("startWithTimeout: creating SDK stream");
-  const sdkStream = queryFn({ prompt: opts.prompt, options: queryOpts });
-  const iterator = sdkStream[Symbol.asyncIterator]();
-  const firstResult = await raceFirstEvent(iterator, timeoutMs);
-  if (firstResult.timedOut) {
-    const reason = firstResult.error
-      ? `SDK error: ${firstResult.error}`
-      : `timeout after ${timeoutMs}ms`;
-    debugClaude(`startWithTimeout: ${reason}, switching to CLI fallback`);
-    if (typeof iterator.return === "function") {
-      iterator.return(undefined).catch((err) => {
-        debugClaude(`startWithTimeout: iterator cleanup failed: ${err}`);
-      });
-    }
-    const fallbackStream = cliFallbackFn(opts, queryOpts);
-    return { stream: fallbackStream, usedFallback: true };
-  }
-  debugClaude("startWithTimeout: first event received from SDK stream");
-  const stream = prependEvent(firstResult.value, iterator);
-  return { stream, usedFallback: false };
-}
-async function raceFirstEvent(iterator, timeoutMs) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        resolve({ timedOut: true });
-      }
-    }, timeoutMs);
-    iterator
-      .next()
-      .then((result) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          if (result.done) {
-            // Stream ended immediately with no events — treat as success (empty stream)
-            resolve({ timedOut: false, value: undefined });
-          } else {
-            resolve({ timedOut: false, value: result.value });
-          }
-        }
-      })
-      .catch((err) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          debugClaude(`raceFirstEvent: SDK query() threw: ${err}`);
-          resolve({ timedOut: true, error: err });
-        }
-      });
-  });
-}
-async function* prependEvent(first, iterator) {
-  if (first !== undefined) {
-    yield first;
-  }
-  while (true) {
-    const result = await iterator.next();
-    if (result.done) break;
-    yield result.value;
-  }
-}
-function defaultCliFallback(opts, queryOpts) {
-  const args = ["-p", opts.prompt, "--output-format", "stream-json"];
-  if (opts.model) {
-    args.push("--model", opts.model);
-  }
-  if (opts.sessionId) {
-    args.push("--resume", opts.sessionId);
-  }
-  if (opts.systemPrompt) {
-    args.push("--system-prompt", opts.systemPrompt);
-  }
-  if (queryOpts.allowDangerouslySkipPermissions) {
-    args.push("--dangerously-skip-permissions");
-  }
-  const cwd = queryOpts.cwd;
-  debugClaude(`CLI fallback: claude ${args.join(" ")}`);
-  const child = spawn("claude", args, {
-    cwd,
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  return {
-    async *[Symbol.asyncIterator]() {
-      try {
-        let buffer = "";
-        const stdout = child.stdout;
-        for await (const chunk of stdout) {
-          buffer += chunk.toString();
-          const lines = buffer.split("\n");
-          buffer = lines.pop();
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            try {
-              yield JSON.parse(trimmed);
-            } catch {
-              // Skip non-JSON lines
-            }
-          }
-        }
-        if (buffer.trim()) {
-          try {
-            yield JSON.parse(buffer.trim());
-          } catch {
-            // Skip non-JSON trailing content
-          }
-        }
-        await new Promise((resolve) => {
-          child.on("close", () => resolve());
-        });
-      } finally {
-        if (!child.killed) {
-          child.kill();
-        }
-      }
-    },
-  };
 }
 function buildQueryOptions(opts) {
   const queryOptions = {
@@ -386,9 +243,9 @@ function lastSentenceBoundary(value) {
       ch === "." ||
       ch === "!" ||
       ch === "?" ||
-      ch === "。" ||
-      ch === "！" ||
-      ch === "？"
+      ch === "\u3002" ||
+      ch === "\uFF01" ||
+      ch === "\uFF1F"
     ) {
       return i + 1;
     }
@@ -411,7 +268,7 @@ function shouldEmitTextProgress(previous, next) {
   return next.length - previous.length >= 48 || hasSentenceBoundary(suffix);
 }
 function hasSentenceBoundary(value) {
-  return /[.!?。！？\n]/.test(value);
+  return /[.!?\u3002\uFF01\uFF1F\n]/.test(value);
 }
 function summarizeToolJsonBuffer(toolName, json) {
   const parsed = parseJsonBuffer(json);

@@ -200,7 +200,12 @@ fn run_ralph(
         ReviewComplete(ev) => log("INFO", "Review \{ev.task_id}: \{ev.verdict}")
         PhaseChange(ev) => log("INFO", "Phase: \{ev.phase}")
         SessionComplete(_) => log("INFO", "Session complete")
-        Info(ev) => log("INFO", ev.message)
+        Info(ev) =>
+          if ev.agent_id.is_empty() {
+            log("INFO", ev.message)
+          } else {
+            log("INFO", "[\{ev.agent_id}] \{ev.message}")
+          }
       }
     },
     on_save: fn() { write_file_sync(milestones_path, mgr.to_json()) },

@@ -1110,14 +1110,14 @@ fn handle_event(
 ) -> Unit {
   match event {
     OutputLine(line) => rl.callbacks.emit(AgentOutput({ agent_id, line }))
-    Info(msg) => rl.callbacks.emit(Info({ message: msg }))
+    Info(msg) => rl.callbacks.emit(Info({ agent_id, message: msg }))
     _ => ()
   }
 }
 
 ///|
 fn emit_info(rl : RalphLoop, msg : String) -> Unit {
-  rl.callbacks.emit(Info({ message: msg }))
+  rl.callbacks.emit(Info({ agent_id: "", message: msg }))
 }
 
 ///|
