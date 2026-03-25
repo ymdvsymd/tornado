@@ -9,11 +9,21 @@ import {
 }
 
 // Values
+pub fn add_scope_edges(Array[@types.RalphTask]) -> Array[(String, String)]
+
+pub fn build_wave_barriers(Array[@types.RalphTask]) -> Array[(Array[String], Array[String])]
+
+pub fn compute_layers(Array[@types.RalphTask]) -> (Map[String, Int], Array[String], Array[String])
+
+pub fn detect_scope_overlaps(Array[@types.RalphTask]) -> Array[(String, Array[String])]
+
 pub fn detect_wave_file_conflicts(Array[(@types.RalphTask, Array[String])]) -> Array[(String, Array[String])]
 
 pub fn extract_changed_files(String) -> Array[String]
 
 pub fn inject_perspective_tag(String, @prompts.Perspective) -> String
+
+pub fn is_already_complete_signal(String) -> Bool
 
 // Errors
 
@@ -24,12 +34,27 @@ pub struct MilestoneManager {
   brief : String
 }
 pub fn MilestoneManager::all_milestones_done(Self) -> Bool
+pub fn MilestoneManager::from_parts(Array[@types.Milestone], Int, String) -> Self
 pub fn MilestoneManager::gen_task_id(Self, String) -> String
 pub fn MilestoneManager::load_from_json(String) -> Self raise Failure
 pub fn MilestoneManager::new() -> Self
 pub fn MilestoneManager::next_pending_milestone(Self) -> @types.Milestone?
 pub fn MilestoneManager::parse_planner_output(Self, String, String) -> Array[@types.RalphTask]
 pub fn MilestoneManager::to_json(Self) -> String
+
+pub struct PlanResult {
+  tasks : Array[@types.RalphTask]
+  raw_output : String
+  status : PlanStatus
+}
+
+pub(all) enum PlanStatus {
+  Planned
+  AlreadyComplete
+  PlanFailed
+}
+pub impl Eq for PlanStatus
+pub impl Show for PlanStatus
 
 pub struct PlannerAgent {
   agent_id : String
@@ -38,7 +63,7 @@ pub struct PlannerAgent {
 pub fn PlannerAgent::build_plan_prompt(Self, @types.Milestone) -> String
 pub fn PlannerAgent::new(agent_id? : String, lang? : String) -> Self
 pub fn PlannerAgent::parse_plan(Self, String, String, MilestoneManager) -> Array[@types.RalphTask]
-pub fn PlannerAgent::plan(Self, @types.Milestone, @agent.BoxedBackend, String, Array[@types.Milestone], MilestoneManager, on_event? : (@types.AgentEvent) -> Unit) -> Array[@types.RalphTask]
+pub fn PlannerAgent::plan(Self, @types.Milestone, @agent.BoxedBackend, String, Array[@types.Milestone], MilestoneManager, on_event? : (@types.AgentEvent) -> Unit) -> PlanResult
 
 pub struct RalphLoop {
   config : @config.ProjectConfig
@@ -48,9 +73,13 @@ pub struct RalphLoop {
   backends : Map[String, @agent.BoxedBackend]
   callbacks : @types.OrchestratorCallbacks
   mut current_phase : @types.RalphPhase
+  dry_run : Bool
   max_rework_attempts : Int
+  max_in_flight : Int
+  file_checker : (String) -> Bool
 }
-pub fn RalphLoop::new(@config.ProjectConfig, MilestoneManager, Map[String, @agent.BoxedBackend], @types.OrchestratorCallbacks, lang? : String) -> Self
+pub fn RalphLoop::new(@config.ProjectConfig, MilestoneManager, Map[String, @agent.BoxedBackend], @types.OrchestratorCallbacks, dry_run? : Bool, lang? : String, max_in_flight? : Int, file_checker? : (String) -> Bool) -> Self
+pub fn RalphLoop::resolve_scope_conflicts(Self, @types.Milestone, Int) -> Int
 pub fn RalphLoop::run(Self) -> Unit
 
 pub struct VerifierAgent {

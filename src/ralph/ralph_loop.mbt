@@ -176,6 +176,9 @@ fn RalphLoop::run_milestone(
 
 ///|
 /// Ensure milestone has planner-generated tasks before execution.
+///
+/// Delegates all retry and session-management logic to PlannerAgent::plan()
+/// and uses the structural PlanResult.status to decide the outcome.
 fn RalphLoop::ensure_milestone_tasks(
   self : RalphLoop,
   milestone : @types.Milestone,
@@ -198,9 +201,13 @@ fn RalphLoop::ensure_milestone_tasks(
             self.milestone_manager,
             on_event=fn(e) { handle_event(self, planner.agent_id, e) },
           )
-          if plan_result.tasks.is_empty() {
-            // Check if planner says milestone is already complete
-            if is_already_complete_signal(plan_result.raw_output) {
+          match plan_result.status {
+            Planned => {
+              milestone.tasks = plan_result.tasks
+              self.save_milestones()
+              true
+            }
+            AlreadyComplete => {
               emit_info(
                 self,
                 "Planner reports milestone \{milestone.id} already complete",
@@ -208,48 +215,18 @@ fn RalphLoop::ensure_milestone_tasks(
               milestone.status = Done
               milestone.summary = "Marked complete by planner (already done)"
               self.save_milestones()
-              return true
+              true
             }
-            // Retry once with a fresh session (session exhaustion recovery)
-            emit_info(
-              self,
-              "Planner produced no tasks for \{milestone.id}, retrying with new session",
-            )
-            backend.set_session_id("")
-            let retry_result = planner.plan(
-              milestone,
-              backend,
-              self.milestone_manager.brief,
-              self.milestone_manager.milestones,
-              self.milestone_manager,
-              on_event=fn(e) { handle_event(self, planner.agent_id, e) },
-            )
-            if retry_result.tasks.is_empty() {
-              if is_already_complete_signal(retry_result.raw_output) {
-                emit_info(
-                  self,
-                  "Planner reports milestone \{milestone.id} already complete",
-                )
-                milestone.status = Done
-                milestone.summary = "Marked complete by planner (already done)"
-                self.save_milestones()
-                return true
-              }
+            PlanFailed => {
               emit_info(
                 self,
-                "Planner retry also produced no tasks for \{milestone.id}",
+                "Planner failed to produce tasks for \{milestone.id}",
               )
               milestone.status = Failed("No tasks planned")
               self.save_milestones()
-              return false
+              false
             }
-            milestone.tasks = retry_result.tasks
-            self.save_milestones()
-            return true
           }
-          milestone.tasks = plan_result.tasks
-          self.save_milestones()
-          true
         }
         None => {
           emit_info(self, "No backend found for planner")

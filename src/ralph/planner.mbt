@@ -70,14 +70,30 @@ pub fn PlannerAgent::parse_plan(
 }
 
 ///|
-/// Plan result containing parsed tasks and the raw planner output
+/// Status of a plan result distinguishing normal completion, already-complete,
+/// and planning failure at the type level.
+pub(all) enum PlanStatus {
+  Planned
+  AlreadyComplete
+  PlanFailed
+} derive(Eq, Show)
+
+///|
+/// Plan result containing parsed tasks, the raw planner output, and a
+/// structural status that callers can match on without inspecting raw text.
 pub struct PlanResult {
   tasks : Array[@types.RalphTask]
   raw_output : String
+  status : PlanStatus
 }
 
 ///|
-/// Run the planner agent to generate tasks for a milestone
+/// Run the planner agent to generate tasks for a milestone.
+///
+/// Encapsulates retry logic: if the first attempt yields 0 tasks and the
+/// output is NOT an already-complete signal, the planner resets the session
+/// and retries once. Callers only need to call plan() once and inspect the
+/// returned PlanResult.status.
 pub fn PlannerAgent::plan(
   self : PlannerAgent,
   milestone : @types.Milestone,
@@ -90,13 +106,44 @@ pub fn PlannerAgent::plan(
   let prompt = self.build_plan_prompt(milestone)
   let system_prompt = build_planner_system_prompt(brief, milestones)
   let result = backend.run(prompt, system_prompt, on_event)
-  match result.status {
-    Completed => {
-      let tasks = self.parse_plan(result.content, milestone.id, mgr)
-      { tasks, raw_output: result.content }
-    }
-    _ => { tasks: [], raw_output: result.content }
+  let tasks = match result.status {
+    Completed => self.parse_plan(result.content, milestone.id, mgr)
+    _ => []
   }
+  if not(tasks.is_empty()) {
+    return { tasks, raw_output: result.content, status: Planned }
+  }
+  // 0 tasks — check if planner says milestone is already complete
+  if is_already_complete_signal(result.content) {
+    return { tasks: [], raw_output: result.content, status: AlreadyComplete }
+  }
+  // Retry once with a fresh session (session exhaustion recovery)
+  on_event(
+    @types.AgentEvent::Info(
+      "Planner produced no tasks, retrying with new session",
+    ),
+  )
+  backend.set_session_id("")
+  let retry_result = backend.run(prompt, system_prompt, on_event)
+  let retry_tasks = match retry_result.status {
+    Completed => self.parse_plan(retry_result.content, milestone.id, mgr)
+    _ => []
+  }
+  if not(retry_tasks.is_empty()) {
+    return {
+      tasks: retry_tasks,
+      raw_output: retry_result.content,
+      status: Planned,
+    }
+  }
+  if is_already_complete_signal(retry_result.content) {
+    return {
+      tasks: [],
+      raw_output: retry_result.content,
+      status: AlreadyComplete,
+    }
+  }
+  { tasks: [], raw_output: retry_result.content, status: PlanFailed }
 }
 
 ///|
