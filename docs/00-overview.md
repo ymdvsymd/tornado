@@ -1,10 +1,10 @@
 # Whirlwind - Multi-Agent Development Orchestrator: 総合調査報告
 
 **初版調査日**: 2026-03-07
-**最終更新日**: 2026-03-22
+**最終更新日**: 2026-03-26
 **調査手法**: 7つの専門エージェントによる並行多角的調査
 **リポジトリ**: https://github.com/ymdvsymd/whirlwind
-**バージョン**: 0.1.0 (npm: @ymdvsymd/whirlwind)
+**バージョン**: 0.3.0 (npm: @ymdvsymd/whirlwind)
 
 ---
 
@@ -37,7 +37,7 @@ Whirlwind は **MoonBit** で実装されたマルチエージェント開発オ
 | # | ファイル | 調査視点 | 内容 |
 |---|---------|---------|------|
 | 1 | [01-architecture.md](./01-architecture.md) | アーキテクチャ | モジュール依存関係、レイヤー構造、設計パターン、データフロー |
-| 2 | [02-moonbit-core.md](./02-moonbit-core.md) | MoonBitコア | 全11モジュールの実装詳細、型定義、状態遷移、API |
+| 2 | [02-moonbit-core.md](./02-moonbit-core.md) | MoonBitコア | 全12モジュールの実装詳細、型定義、状態遷移、API |
 | 3 | [03-sdk-integration.md](./03-sdk-integration.md) | SDK統合 | TypeScript SDK、Claude/Codex統合、FFIブリッジ、ストリーミング |
 | 4 | [04-testing-quality.md](./04-testing-quality.md) | テスト品質 | 19テストファイル、約362テストケース、カバレッジ、ビルドシステム |
 | 5 | [05-workflow-ralph.md](./05-workflow-ralph.md) | ワークフロー & Ralph利用ガイド | Ralph自律ループ、CLIオプション、設定、マイルストーン、3大エージェント、レビューサイクル |
@@ -64,6 +64,7 @@ whirlwind/
     agent/               # Layer 2: エージェント抽象化・実行
     review/              # Layer 2: 3観点レビュー
     ralph/               # Layer 3: マイルストーン駆動自律ループ
+    plan/                # Layer 3: Plan Markdown パース・変換
     cmd/helpers/         # Layer 4: ヘルパー関数
     cmd/app/             # Layer 4: エントリーポイント・FFI
   sdk/
@@ -88,17 +89,18 @@ whirlwind/
 1. **型安全な状態管理** - MoonBitの代数的データ型でコンパイル時に状態網羅性を保証
 2. **AgentBackend trait** - 新エージェント種追加が容易なプラグイン設計
 3. **統一ストリーミング** - Claude/Codexの異なるイベント形式をアダプターで統一
-4. **3観点レビュー** - CodeQuality/Performance/Security の独立レビューとマージ
+4. **4観点並列検証** - CodeQuality/Performance/Security/GoalAlignment の並列レビュー（v0.3.0）
 5. **テストカバレッジ** - コアロジック中心に約362テストケース（19ファイル）
 6. **明確なレイヤー分離** - types → config → agent → orchestrator → main
-7. **Verifier フィードバック実装** - ターゲット指定のフィードバックルーティング（v0.6.0）
+7. **Verifier フィードバック実装** - ターゲット指定のフィードバックルーティング
 8. **ralph-whirlwind スキル** - 計画ファイルからマイルストーン変換・起動・監視を自動化
+9. **DAGベースタスクスケジューリング** - depends_on による依存グラフでバッチ並列実行（v0.3.0）
+10. **Plan Markdown 入力** - `--plan` フラグで Markdown 計画ファイルから直接実行（v0.3.0）
+11. **回復性** - Builder の 5xx サーバーエラーリトライ、Verifier のサーキットブレーカー（v0.3.0）
 
 ### 改善余地
 
-1. ~~**Verifier フィードバック未活用**~~ → **v0.6.0 で実装済み**（タスクID指定のルーティング + フォールバックブロードキャスト）
-2. **Wave 並列実行未実装** - 設計上は並列可能だが順序実行
-3. **タイムアウト固定** - FFI の10分タイムアウトが設定不可
+1. **タイムアウト固定** - FFI の10分タイムアウトが設定不可
 
 ### 品質スコア
 

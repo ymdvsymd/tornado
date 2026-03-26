@@ -22,8 +22,8 @@
 **Ralph ループ:**
 - `MilestoneStatus` (enum): Pending | InProgress | Done | Failed(String)
 - `Milestone` (struct): id, goal, status, tasks[], summary
-- `RalphTask` (struct): id, description, wave, status, result
-- `RalphPhase` (enum): LoadingMilestones | Planning(String) | ExecutingWave(String, Int) | Verifying(String, Int) | Reworking(String, Int) | MilestoneComplete(String) | AllComplete
+- `RalphTask` (struct): id, description, status, result, scope, depends_on
+- `RalphPhase` (enum): LoadingMilestones | Planning(String) | ExecutingDag(String) | Verifying(String, Int) | Reworking(String, Int) | MilestoneComplete(String) | AllComplete
 - `VerifierVerdict` (enum): Approved | NeedsRework(Array[String]) | MilestoneFailed(String)
 
 **イベント・コールバック:**
@@ -127,12 +127,23 @@ XMLタグベース:
 
 状態マシン:
 ```
-LoadingMilestones -> Planning(m_id) -> ExecutingWave(m_id, wave)
-  -> Verifying(m_id, wave) -> (Reworking -> Verifying)*
+LoadingMilestones -> Planning(m_id) -> ExecutingDag(m_id)
+  -> Verifying(m_id, attempt) -> (Reworking -> Verifying)*
   -> MilestoneComplete(m_id) -> AllComplete
 ```
 
-**フィードバックルーティング (v0.6.0):**
+**DAGスケジューリング (v0.3.0):**
+
+`run_dag()` は Kahn's アルゴリズムでタスクの依存グラフをトポロジカルソートし、
+レイヤーごとにバッチ並列実行する（`--max-in-flight` で同時実行数を制御、デフォルト 3）。
+
+**サーキットブレーカー (v0.3.0):**
+
+- Builder の 5xx サーバーエラーに対するリトライ（`run_with_retry()`）
+- Verifier インフラ障害時の即時マイルストーン失敗判定
+- リワーク後に変更がない場合の連続検出（2回連続で強制承認）
+
+**フィードバックルーティング:**
 
 `rework_tasks()` はターゲット指定のフィードバック配信を実装:
 - `strip_task_feedback_prefix()`: タスクIDプレフィクス除去
@@ -142,7 +153,7 @@ LoadingMilestones -> Planning(m_id) -> ExecutingWave(m_id, wave)
 
 ### 4.2 PlannerAgent (planner.mbt)
 
-マイルストーン -> Waveごとのタスクリスト生成
+マイルストーン -> タスクリスト生成（WAVE形式、DAGの依存関係として解釈）
 
 出力フォーマット:
 ```
@@ -154,9 +165,12 @@ WAVE 1:
 1. Task that depends on wave 0
 ```
 
+パース後、WAVE 番号は `depends_on` 関係に変換される。
+
 ### 4.3 VerifierAgent (verifier.mbt)
 
-Wave の実行結果を検証
+マイルストーンの全タスク結果を4観点で並列検証（CodeQuality, Performance, Security, GoalAlignment）。
+`@agent.run_parallel()` で4つのプロンプトを同時実行し、結果をマージする。
 
 判定タグ:
 - `<wave_approved>` -> Approved
@@ -166,9 +180,9 @@ Wave の実行結果を検証
 ### 4.4 MilestoneManager (milestone.mbt)
 
 - JSON シリアライズ (milestones.json 永続化)
-- `parse_planner_output()`: WAVE テキスト解析
+- `parse_planner_output()`: WAVE テキスト解析 → depends_on 付きタスク生成
 - `gen_task_id()`: m1-t1, m1-t2, ... 自動採番
-- Wave 管理: `get_wave_tasks()`, `has_undone_tasks()`, `next_wave_number()`
+- DAG 管理: `has_undone_tasks()`, depends_on ベースの依存解決
 - ID復旧: ロード時に max(task_id) から next_task_id を復元
 
 ---
@@ -182,7 +196,9 @@ Wave の実行結果を検証
 ```moonbit
 pub enum CliCommand {
   Run(config_path~, planner_kind~, builder_kind~, verifier_kind~,
-      milestones_path~, lang~, log_path~, warnings~)
+      planner_model~, builder_model~, verifier_model~,
+      milestones_path~, plan_path~, dry_run~,
+      lang~, log_path~, max_in_flight~, warnings~)
   Validate(String?)
   Help
   Version
@@ -197,9 +213,15 @@ pub enum CliCommand {
 | `--planner=KIND` | claude-code/codex/mock | Planner エージェント種 |
 | `--builder=KIND` | 同上 | Builder エージェント種 |
 | `--verifier=KIND` | 同上 | Verifier エージェント種 |
+| `--planner-model=MODEL` | モデル名 | Planner モデル (デフォルト: sonnet) |
+| `--builder-model=MODEL` | モデル名 | Builder モデル (デフォルト: sonnet) |
+| `--verifier-model=MODEL` | モデル名 | Verifier モデル (デフォルト: sonnet) |
 | `--milestones=PATH` | ファイルパス | マイルストーンJSONパス |
+| `--plan=PATH` | ファイルパス | Plan Markdown ファイルパス |
+| `--dry-run` | フラグ | 計画の検証のみ（エージェント実行なし） |
 | `--lang=LANG` | auto/ja/en | レビュー言語 |
 | `--log=PATH` | ファイルパス | ログファイルパス |
+| `--max-in-flight=N` | 整数 | DAG 同時実行タスク数 (デフォルト: 3) |
 
 ### apply_overrides()
 
@@ -298,7 +320,41 @@ pub struct ProjectConfig {
 
 ---
 
-## 10. src/cmd/helpers/ - ヘルパー関数
+## 10. src/plan/ - Plan Markdown パース（v0.3.0 新規）
+
+依存: types, util, json
+
+### 概要
+
+Markdown 形式の計画ファイルを MilestoneManager に変換する5フェーズパイプライン。
+`--plan` フラグで指定された Markdown を解析し、マイルストーン構造に変換する。
+
+### 主要型
+
+```moonbit
+pub(all) struct PlanSection { heading: String, body: String }
+pub(all) struct PlanDocument { title: String, intro: String, sections: Array[PlanSection] }
+```
+
+### コンポーネント
+
+| ファイル | 役割 |
+|---------|------|
+| parser.mbt | Markdown パース (# Title, ## Sections) → PlanDocument |
+| classifier.mbt | ヒューリスティック分類: Info/Milestone 判定 |
+| llm_classifier.mbt | LLM ベース分類（不確実なセクションのフォールバック） |
+| converter.mbt | PlanDocument → MilestoneManager 変換 |
+| naming.mbt | タスクID・マイルストーンID 生成 |
+
+### 主要関数
+
+- `parse_plan(content: String) -> PlanDocument`: Markdown → 構造化ドキュメント
+- セクションの Info/Milestone 分類（ヒューリスティック + LLM フォールバック）
+- マイルストーン変換: セクション → Milestone（`m1`, `m2`, ... の自動ID付与）
+
+---
+
+## 11. src/cmd/helpers/ - ヘルパー関数
 
 依存: json
 

@@ -123,11 +123,12 @@ whirlwind validate ./whirlwind.json
 | `--planner=KIND` | Override planner agent kind |
 | `--builder=KIND` | Override builder agent kind |
 | `--verifier=KIND` | Override verifier agent kind |
-| `--planner-model=MODEL` | Override planner model (default: `opus` for claude-code) |
-| `--builder-model=MODEL` | Override builder model (default: `opus` for claude-code) |
+| `--planner-model=MODEL` | Override planner model (default: `sonnet` for claude-code) |
+| `--builder-model=MODEL` | Override builder model (default: `sonnet` for claude-code) |
 | `--verifier-model=MODEL` | Override verifier model (default: `sonnet` for claude-code) |
 | `--lang=LANG` | Review language (`auto`/`ja`/`en`) |
 | `--log=PATH` | Log file path |
+| `--max-in-flight=N` | Max concurrent DAG tasks (default: `3`) |
 
 ## Agent kind options
 
@@ -141,8 +142,8 @@ When using `claude-code` kind, models default to:
 
 | Role | Default model |
 |------|---------------|
-| Planner | `opus` |
-| Builder | `opus` |
+| Planner | `sonnet` |
+| Builder | `sonnet` |
 | Verifier | `sonnet` |
 
 Model aliases (`opus`, `sonnet`, `haiku`) resolve to the latest version automatically. You can also specify exact model IDs like `claude-sonnet-4-6`.

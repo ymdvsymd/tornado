@@ -5,7 +5,7 @@
 - **テストファイル数**: 19 (MoonBit 13 + TypeScript 6)
 - **テストケース総数**: 362 (MoonBit 328 + Node.js 34)
 - **品質スコア**: 8.5/10
-- **最終更新**: 2026-03-22 (v0.1.0)
+- **最終更新**: 2026-03-26 (v0.3.0)
 
 ---
 
@@ -166,8 +166,8 @@ struct EventCollector {
 
 ### バージョン情報
 
-- `moon.mod.json`: 0.1.0 (MoonBit パッケージ)
-- `package.json`: 0.1.0 (npm パッケージ: @ymdvsymd/whirlwind)
+- `moon.mod.json`: 0.3.0 (MoonBit パッケージ)
+- `package.json`: 0.3.0 (npm パッケージ: @ymdvsymd/whirlwind)
 
 ---
 

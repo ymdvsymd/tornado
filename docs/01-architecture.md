@@ -5,7 +5,7 @@
 ### 1.1 全モジュール構成（11パッケージ）
 
 ```
-ymdvsymd/whirlwind (root)  ※ npm は @ymdvsymd/whirlwind v0.1.0
+ymdvsymd/whirlwind (root)  ※ npm は @ymdvsymd/whirlwind v0.3.0
   types          (基本型定義、no import)
   util           (-> json)
   config         (-> types, util, json)
@@ -15,9 +15,10 @@ ymdvsymd/whirlwind (root)  ※ npm は @ymdvsymd/whirlwind v0.1.0
   agent          (-> types, json)
   review         (-> types, agent, prompts, util)
   ralph          (-> types, agent, config, prompts, util, json)
+  plan           (-> types, util, json)
   cmd/helpers    (-> json)
   cmd/app        (is-main: true)
-    imports: types, config, cli, agent, ralph, cmd/helpers, sys, json
+    imports: types, config, cli, agent, ralph, plan, cmd/helpers, sys, json
 ```
 
 ### 1.2 外部依存関係
@@ -47,6 +48,7 @@ Layer 2: エージェント実装
 
 Layer 3: オーケストレーション
   ralph (-> types, agent, config, prompts, util, json)
+  plan (-> types, util, json)
 
 Layer 4: CLI・エントリーポイント
   cmd/helpers (-> json)
@@ -161,8 +163,8 @@ stateDiagram-v2
     [*] --> LoadingMilestones
     LoadingMilestones --> Planning : milestone取得
 
-    Planning --> ExecutingWave : wave生成
-    ExecutingWave --> Verifying : wave完了
+    Planning --> ExecutingDag : DAGタスク生成
+    ExecutingDag --> Verifying : 全タスク完了
 
     Verifying --> MilestoneComplete : 検証OK
     Verifying --> Reworking : 要修正
