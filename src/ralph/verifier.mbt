@@ -20,7 +20,6 @@ pub fn VerifierAgent::build_perspective_prompt(
   perspective : @prompts.Perspective,
   milestone : @types.Milestone,
   task_results : Array[(String, String)],
-  project_context : String,
 ) -> String {
   let lang_instruction = if self.lang == "ja" {
     "Respond in Japanese."
@@ -37,11 +36,6 @@ pub fn VerifierAgent::build_perspective_prompt(
   buf.write_string("\nGoal: ")
   buf.write_string(milestone.goal)
   buf.write_string("\n\n")
-  if not(project_context.is_empty()) {
-    buf.write_string("## Project Context\n")
-    buf.write_string(project_context)
-    buf.write_string("\n\n")
-  }
   buf.write_string("## Task Results\n")
   for pair in task_results {
     buf.write_string("### Task: ")
@@ -119,7 +113,6 @@ pub fn VerifierAgent::verify(
   milestone : @types.Milestone,
   task_results : Array[(String, String)],
   backend : @agent.BoxedBackend,
-  project_context : String,
   perspectives? : Array[@prompts.Perspective] = [
     CodeQuality,
     Performance,
@@ -132,7 +125,7 @@ pub fn VerifierAgent::verify(
   for perspective in perspectives {
     on_event(Info("Verifying perspective: " + perspective.to_string()))
     let prompt = self.build_perspective_prompt(
-      perspective, milestone, task_results, project_context,
+      perspective, milestone, task_results,
     )
     let system_prompt = "You are a verification agent focusing on " +
       perspective.to_string() +

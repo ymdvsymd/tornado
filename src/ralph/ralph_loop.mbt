@@ -841,7 +841,6 @@ fn RalphLoop::verify_milestone(
             milestone,
             all_results,
             backend,
-            "",
             perspectives~,
             on_event=fn(e) { handle_event(self, verifier.agent_id, e) },
           )
