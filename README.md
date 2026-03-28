@@ -128,6 +128,7 @@ whirlwind validate ./whirlwind.json
 | `--verifier-model=MODEL` | Override verifier model (default: `sonnet` for claude-code) |
 | `--lang=LANG` | Review language (`auto`/`ja`/`en`) |
 | `--log=PATH` | Log file path |
+| `--run-log` | Auto-create `whirlwind.log` in run directory (with `--plan`) |
 | `--max-in-flight=N` | Max concurrent DAG tasks (default: `3`) |
 
 ## Agent kind options

@@ -13,6 +13,7 @@ pub(all) enum CliCommand {
     dry_run~ : Bool,
     lang~ : String?,
     log_path~ : String?,
+    run_log~ : Bool,
     max_in_flight~ : Int?,
     warnings~ : Array[String]
   )
@@ -43,6 +44,7 @@ pub fn parse_cli_args(
       dry_run=false,
       lang=None,
       log_path=None,
+      run_log=false,
       max_in_flight=None,
       warnings=[],
     )
@@ -143,6 +145,7 @@ fn parse_run_args(
   let mut dry_run : Bool = false
   let mut lang : String? = None
   let mut log_path : String? = None
+  let mut run_log : Bool = false
   let mut max_in_flight : Int? = None
   let warnings : Array[String] = []
 
@@ -351,6 +354,12 @@ fn parse_run_args(
       continue
     }
 
+    if token == "--run-log" {
+      run_log = true
+      i += 1
+      continue
+    }
+
     if token.has_prefix("--") {
       warnings.push("Unknown option: \{token}")
       i += 1
@@ -374,6 +383,7 @@ fn parse_run_args(
     dry_run~,
     lang~,
     log_path~,
+    run_log~,
     max_in_flight~,
     warnings~,
   )

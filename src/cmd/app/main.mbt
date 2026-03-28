@@ -33,6 +33,7 @@ fn main {
       dry_run~,
       lang=cli_lang,
       log_path~,
+      run_log~,
       max_in_flight~,
       warnings~
     ) => {
@@ -41,12 +42,21 @@ fn main {
       }
       let lang = resolve_lang(cli_lang)
       match log_path {
-        Some(path) => set_log_file(path)
+        Some(path) => {
+          if run_log {
+            log(
+              "WARN",
+              "--log and --run-log both specified; using --log=\{path}",
+            )
+          }
+          set_log_file(path)
+        }
         None => ()
       }
       run_ralph(
         config_path, lang, planner_kind, builder_kind, verifier_kind, planner_model,
-        builder_model, verifier_model, cli_milestones, plan_path, dry_run, max_in_flight,
+        builder_model, verifier_model, cli_milestones, plan_path, dry_run, run_log,
+        max_in_flight,
       )
     }
     @cli.CliCommand::Validate(path) =>
@@ -94,6 +104,9 @@ fn print_usage() -> Unit {
   )
   println("  --log=<path>            Log file path")
   println(
+    "  --run-log               Auto-create whirlwind.log in run directory (with --plan)",
+  )
+  println(
     "  --max-in-flight=<N>     Max concurrent tasks in DAG execution (default: 3)",
   )
   println("  --version, -v           Show version")
@@ -117,6 +130,7 @@ fn run_ralph(
   cli_milestones : String?,
   plan_path : String?,
   dry_run : Bool,
+  run_log : Bool,
   max_in_flight : Int?,
 ) -> Unit {
   log("INFO", "Starting ralph loop mode...")
@@ -170,6 +184,18 @@ fn run_ralph(
   let (milestones_path, mgr) = match plan_path {
     Some(path) => load_milestones_from_plan(path, config, backends)
     None => load_milestones_from_file(config)
+  }
+  // Handle --run-log: set log file to run directory when used with --plan
+  if run_log && get_log_file().is_empty() {
+    match plan_path {
+      Some(_) => {
+        let run_dir = parent_dir(milestones_path)
+        let log_file = run_dir + "/whirlwind.log"
+        set_log_file(log_file)
+        log("INFO", "Run log enabled: \{log_file}")
+      }
+      None => log("WARN", "--run-log requires --plan; ignored without --plan")
+    }
   }
   if mgr.milestones.is_empty() {
     log("WARN", "No milestones defined. Create \{milestones_path} first.")
@@ -437,5 +463,23 @@ fn run_validate(config_path : String) -> Unit {
     for err in errors {
       println("  - \{err}")
     }
+  }
+}
+
+///|
+/// Extract parent directory from a file path.
+/// e.g. "a/b/c.json" → "a/b", "c.json" → "."
+fn parent_dir(path : String) -> String {
+  let chars = path.to_array()
+  let mut last_slash = -1
+  for i in 0..<chars.length() {
+    if chars[i] == '/' {
+      last_slash = i
+    }
+  }
+  if last_slash <= 0 {
+    "."
+  } else {
+    path.view(start_offset=0, end_offset=last_slash).to_string()
   }
 }

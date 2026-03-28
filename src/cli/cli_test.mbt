@@ -530,6 +530,57 @@ test "parse_cli_args --max-in-flight followed by flag warns" {
 }
 
 ///|
+test "parse_cli_args --run-log sets run_log true" {
+  let args = ["whirlwind", "--run-log"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(run_log~, warnings~, ..) => {
+      inspect(run_log, content="true")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args without --run-log defaults to false" {
+  let args = ["whirlwind", "--builder=codex"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(run_log~, ..) => inspect(run_log, content="false")
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --run-log with --plan" {
+  let args = ["whirlwind", "--run-log", "--plan=file.md"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(run_log~, plan_path~, warnings~, ..) => {
+      inspect(run_log, content="true")
+      inspect(plan_path, content="Some(\"file.md\")")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "parse_cli_args --run-log with --log both parsed" {
+  let args = ["whirlwind", "--run-log", "--log=/tmp/my.log"]
+  let parsed = @cli.parse_cli_args(args, file_exists_mock)
+  match parsed {
+    Run(run_log~, log_path~, warnings~, ..) => {
+      inspect(run_log, content="true")
+      inspect(log_path, content="Some(\"/tmp/my.log\")")
+      assert_true(warnings.is_empty())
+    }
+    _ => panic()
+  }
+}
+
+///|
 test "ProjectConfig::preset_ralph" {
   let config = @config.ProjectConfig::preset_ralph()
   assert_true(config.agents.length() == 3)
