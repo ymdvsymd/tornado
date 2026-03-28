@@ -21,6 +21,9 @@ pub fn code_quality_checklist(lang : String) -> String {
     buf.write_string(
       "- API 設計と公開インターフェースの明確さ\n",
     )
+    buf.write_string(
+      "この観点は静的コードレビュー専用です。ビルド、テスト、結合テスト、ベンチマークなどの実行は行わず、提示されたコードを読んで判断してください。\n",
+    )
   } else {
     buf.write_string("## Review Focus: Code Quality\n")
     buf.write_string("Evaluate the following aspects:\n")
@@ -30,6 +33,9 @@ pub fn code_quality_checklist(lang : String) -> String {
     buf.write_string("- Test coverage and correctness\n")
     buf.write_string("- Code duplication and unnecessary complexity\n")
     buf.write_string("- API design and public interface clarity\n")
+    buf.write_string(
+      "This perspective is for static code review only. Do not run builds, tests, integration tests, or benchmarks; evaluate only by reading the provided code.\n",
+    )
   }
   buf.to_string()
 }
