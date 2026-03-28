@@ -49,7 +49,7 @@ if [[ ${#findings[@]} -gt 0 ]]; then
   ctx="console.log statements found in modified files:"$'\n'"${detail}Please remove or replace with proper logging before committing."
   jq -n --arg ctx "$ctx" \
     '{"hookSpecificOutput": {"additionalContext": $ctx}}'
-  exit 0
+  exit 2
 fi
 
 exit 0

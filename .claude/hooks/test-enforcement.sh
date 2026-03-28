@@ -45,7 +45,7 @@ while kill -0 "$_pid" 2>/dev/null; do
     wait "$_pid" 2>/dev/null || true
     jq -n --arg ctx "SDK tests timed out after ${TIMEOUT_SEC} seconds. Please investigate slow or hanging tests." \
       '{"hookSpecificOutput": {"additionalContext": $ctx}}'
-    exit 0
+    exit 2
   fi
   sleep 1
   _elapsed=$((_elapsed + 1))
@@ -60,7 +60,7 @@ if [[ $test_exit -ne 0 ]]; then
   truncated=$(echo "$test_output" | tail -80)
   jq -n --arg ctx "$(printf "SDK tests failed (exit code %d). Modified SDK files:\n%s\n\nTest output (last 80 lines):\n%s" "$test_exit" "$sdk_modified" "$truncated")" \
     '{"hookSpecificOutput": {"additionalContext": $ctx}}'
-  exit 0
+  exit 2
 fi
 
 # Tests passed
