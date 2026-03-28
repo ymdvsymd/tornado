@@ -63,7 +63,12 @@ impl AgentBackend for MockBackend with run(self, task, system_prompt, on_output)
   if self.session_id.is_empty() {
     self.session_id = "mock-session-id"
   }
-  { content: response, status: Completed, error: None, session_id: "" }
+  {
+    content: response,
+    status: Completed,
+    error: None,
+    session_id: self.session_id,
+  }
 }
 
 ///|

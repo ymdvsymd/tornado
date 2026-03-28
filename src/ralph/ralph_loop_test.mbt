@@ -3264,7 +3264,7 @@ test "whirlwind-z9r: rework resets builder session_id before re-execution" {
     #|    {
     #|      "id": "m1", "goal": "Build auth", "status": "pending",
     #|      "tasks": [
-    #|        { "id": "m1-t1", "description": "Implement login flow", "wave": 0, "status": "pending" }
+    #|        { "id": "m1-t1", "description": "Implement login flow", "status": "pending" }
     #|      ]
     #|    }
     #|  ]
