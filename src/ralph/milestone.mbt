@@ -132,6 +132,7 @@ fn parse_milestone(json : Json) -> @types.Milestone {
   }
   let tasks : Array[@types.RalphTask] = []
   let summary = @util.get_string(json, "summary", "")
+  let perspectives = parse_milestone_perspectives(json)
   match json {
     Object(map) =>
       match map.get("tasks") {
@@ -143,7 +144,34 @@ fn parse_milestone(json : Json) -> @types.Milestone {
       }
     _ => ()
   }
-  { id, goal, status, tasks, summary }
+  { id, goal, status, tasks, summary, perspectives }
+}
+
+///|
+fn parse_milestone_perspectives(json : Json) -> Array[String] {
+  match json {
+    Object(map) =>
+      match map.get("perspectives") {
+        Some(Array(items)) => {
+          let perspectives : Array[String] = []
+          for item in items {
+            match item {
+              String(s) => perspectives.push(s)
+              _ => ()
+            }
+          }
+          perspectives
+        }
+        None => default_milestone_perspectives()
+        _ => default_milestone_perspectives()
+      }
+    _ => default_milestone_perspectives()
+  }
+}
+
+///|
+fn default_milestone_perspectives() -> Array[String] {
+  ["CodeQuality", "Performance", "Security", "GoalAlignment"]
 }
 
 ///|

@@ -86,6 +86,7 @@ test "JSON roundtrip preserves scope" {
       },
     ],
     summary: "",
+    perspectives: [],
   })
 
   let serialized = mgr.to_json()
@@ -144,6 +145,7 @@ test "JSON roundtrip preserves depends_on" {
       },
     ],
     summary: "",
+    perspectives: [],
   })
 
   let serialized = mgr.to_json()
@@ -234,6 +236,67 @@ test "Milestone summary parsing and serialization" {
 }
 
 ///|
+test "MilestoneManager::load_from_json defaults perspectives when key is absent" {
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1",
+    #|      "goal": "Build auth",
+    #|      "status": "pending",
+    #|      "tasks": []
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let perspectives = mgr.milestones[0].perspectives
+  assert_true(perspectives.length() == 4)
+  inspect(perspectives[0], content="CodeQuality")
+  inspect(perspectives[1], content="Performance")
+  inspect(perspectives[2], content="Security")
+  inspect(perspectives[3], content="GoalAlignment")
+}
+
+///|
+test "MilestoneManager::load_from_json preserves explicit empty perspectives" {
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1",
+    #|      "goal": "Verification only",
+    #|      "status": "pending",
+    #|      "perspectives": [],
+    #|      "tasks": []
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  assert_true(mgr.milestones[0].perspectives.length() == 0)
+}
+
+///|
+test "MilestoneManager::load_from_json uses explicit perspectives as-is" {
+  let json =
+    #|{
+    #|  "milestones": [
+    #|    {
+    #|      "id": "m1",
+    #|      "goal": "Test-only change",
+    #|      "status": "pending",
+    #|      "perspectives": ["CodeQuality", "GoalAlignment"],
+    #|      "tasks": []
+    #|    }
+    #|  ]
+    #|}
+  let mgr = @ralph.MilestoneManager::load_from_json(json)
+  let perspectives = mgr.milestones[0].perspectives
+  assert_true(perspectives.length() == 2)
+  inspect(perspectives[0], content="CodeQuality")
+  inspect(perspectives[1], content="GoalAlignment")
+}
+
+///|
 test "to_json produces valid JSON parseable by @json.parse" {
   let json =
     #|{
@@ -307,6 +370,7 @@ test "to_json uses Json API not manual string concatenation" {
       },
     ],
     summary: "",
+    perspectives: [],
   })
   let serialized = mgr.to_json()
   // Must be valid JSON
