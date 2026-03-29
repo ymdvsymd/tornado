@@ -71,3 +71,33 @@ test "generate_run_dir_name lowercases ascii case-insensitively" {
 
   inspect(actual, content=".runs/2026-03-24_1430_uppercase-title")
 }
+
+///|
+test "generate_run_dir_name lowercases boundary char A correctly" {
+  let actual = @plan.generate_run_dir_name("A", "ts")
+
+  inspect(actual, content=".runs/ts_a")
+}
+
+///|
+test "generate_run_dir_name lowercases boundary char Z correctly" {
+  let actual = @plan.generate_run_dir_name("Z", "ts")
+
+  inspect(actual, content=".runs/ts_z")
+}
+
+///|
+test "generate_run_dir_name lowercases full A-Z range" {
+  let actual = @plan.generate_run_dir_name("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "ts")
+
+  inspect(actual, content=".runs/ts_abcdefghijklmnopqrstuvwxyz")
+}
+
+///|
+test "generate_run_dir_name preserves chars just outside A-Z range" {
+  // '@' is 0x40 (just before 'A'), '[' is 0x5B (just after 'Z')
+  // These should not be lowercased; non-alnum ASCII is stripped by sanitize_title
+  let actual = @plan.generate_run_dir_name("a@b[c", "ts")
+
+  inspect(actual, content=".runs/ts_abc")
+}

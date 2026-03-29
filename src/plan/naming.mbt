@@ -41,6 +41,10 @@ fn sanitize_title(title : String) -> String {
 }
 
 ///|
+/// Converts an ASCII uppercase letter to lowercase.
+/// SAFETY: unsafe_to_char is guarded by `ch >= 'A' && ch <= 'Z'`, ensuring
+/// the input range is 0x41..0x5A. The offset +32 produces 0x61..0x7A ('a'..'z'),
+/// which are always valid Unicode code points.
 fn to_ascii_lower(ch : Char) -> Char {
   if ch >= 'A' && ch <= 'Z' {
     (ch.to_int() + ('a'.to_int() - 'A'.to_int())).unsafe_to_char()
