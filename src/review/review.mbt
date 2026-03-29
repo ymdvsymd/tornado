@@ -175,7 +175,11 @@ pub fn ReviewAgent::review(
     let verdict = match output.status {
       Failed(err) =>
         @types.ReviewVerdict::Rejected("Review backend failed: \{err}")
-      Completed | Idle | Running => self.parse_verdict(output.content)
+      Completed => self.parse_verdict(output.content)
+      Idle | Running =>
+        @types.ReviewVerdict::Rejected(
+          "Unexpected agent status: \{output.status}",
+        )
     }
     match verdict {
       Rejected(reason) =>

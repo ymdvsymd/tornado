@@ -208,6 +208,53 @@ pub fn SequenceMockBackend::boxed(self : SequenceMockBackend) -> BoxedBackend {
 }
 
 ///|
+/// StatusMockBackend returns a response with a specific AgentStatus
+pub struct StatusMockBackend {
+  status : @types.AgentStatus
+  response : String
+}
+
+///|
+/// Create a new StatusMockBackend
+pub fn StatusMockBackend::new(
+  status : @types.AgentStatus,
+  response? : String = "",
+) -> StatusMockBackend {
+  { status, response }
+}
+
+///|
+impl AgentBackend for StatusMockBackend with run(
+  self,
+  _task,
+  _system_prompt,
+  on_output,
+) {
+  on_output(@types.AgentEvent::StatusChange(self.status))
+  { content: self.response, status: self.status, error: None, session_id: "" }
+}
+
+///|
+impl AgentBackend for StatusMockBackend with name(_self) {
+  "status-mock"
+}
+
+///|
+impl AgentBackend for StatusMockBackend with set_session_id(_self, _sid) {
+
+}
+
+///|
+impl AgentBackend for StatusMockBackend with get_session_id(_self) {
+  ""
+}
+
+///|
+pub fn StatusMockBackend::boxed(self : StatusMockBackend) -> BoxedBackend {
+  BoxedBackend::new(self)
+}
+
+///|
 /// FailNTimesMockBackend fails for the first N calls, then returns success
 pub struct FailNTimesMockBackend {
   fail_count : Int

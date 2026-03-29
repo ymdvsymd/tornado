@@ -258,6 +258,52 @@ test "review merges correctly when one perspective backend fails" {
 }
 
 ///|
+test "ReviewAgent::review rejects Idle status instead of treating as Completed" {
+  // Regression test for whirlwind-9fi: Idle status should be rejected,
+  // not treated as Completed and parsed for a verdict
+  let idle_mock = @agent.StatusMockBackend::new(
+    @types.AgentStatus::Idle,
+    response="<approved>",
+  )
+  let backend = idle_mock.boxed()
+  let ra = @review.ReviewAgent::new("r1", "en")
+  let task = @types.Task::new("t1", "implement feature")
+  task.complete("done")
+  let result = ra.review(task, backend)
+  match result.verdict {
+    @types.ReviewVerdict::Rejected(reason) =>
+      assert_true(
+        reason.contains("Unexpected agent status"),
+        msg="Expected rejection reason to mention unexpected status, got: \{reason}",
+      )
+    other => fail("Expected Rejected for Idle status, got \{other}")
+  }
+}
+
+///|
+test "ReviewAgent::review rejects Running status instead of treating as Completed" {
+  // Regression test for whirlwind-9fi: Running status should be rejected,
+  // not treated as Completed and parsed for a verdict
+  let running_mock = @agent.StatusMockBackend::new(
+    @types.AgentStatus::Running,
+    response="<approved>",
+  )
+  let backend = running_mock.boxed()
+  let ra = @review.ReviewAgent::new("r1", "en")
+  let task = @types.Task::new("t1", "implement feature")
+  task.complete("done")
+  let result = ra.review(task, backend)
+  match result.verdict {
+    @types.ReviewVerdict::Rejected(reason) =>
+      assert_true(
+        reason.contains("Unexpected agent status"),
+        msg="Expected rejection reason to mention unexpected status, got: \{reason}",
+      )
+    other => fail("Expected Rejected for Running status, got \{other}")
+  }
+}
+
+///|
 test "ReviewAgent::build_prompt ja includes Japanese text" {
   let ra = @review.ReviewAgent::new("r1", "ja")
   let prompt = ra.build_prompt(
