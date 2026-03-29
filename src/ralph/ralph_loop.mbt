@@ -1181,7 +1181,19 @@ fn handle_event(
   match event {
     OutputLine(line) => rl.callbacks.emit(AgentOutput({ agent_id, line }))
     Info(msg) => rl.callbacks.emit(Info({ agent_id, message: msg }))
-    _ => ()
+    Usage(input_tokens~, output_tokens~, cache_read~, cache_write~, cost_usd~) => {
+      let msg = "[Usage] agent=\{agent_id} input=\{input_tokens} output=\{output_tokens} cache_read=\{cache_read} cache_write=\{cache_write} cost_usd=\{cost_usd}"
+      rl.callbacks.emit(Info({ agent_id, message: msg }))
+    }
+    SessionId(sid) => {
+      let msg = "[Session] agent=\{agent_id} session_id=\{sid}"
+      rl.callbacks.emit(Info({ agent_id, message: msg }))
+    }
+    ToolCall(..) => ()
+    ToolResult(..) => ()
+    SubAgentStart(..) => ()
+    SubAgentEnd(..) => ()
+    StatusChange(_) => ()
   }
 }
 
