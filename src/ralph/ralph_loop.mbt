@@ -12,6 +12,7 @@ pub struct RalphLoop {
   max_rework_attempts : Int
   max_in_flight : Int
   file_checker : (String) -> Bool
+  seen_sessions : Map[String, String]
 }
 
 ///|
@@ -50,6 +51,7 @@ pub fn RalphLoop::new(
     max_rework_attempts: config.max_rework_attempts,
     max_in_flight: safe_max_in_flight,
     file_checker,
+    seen_sessions: {},
   }
 }
 
@@ -1186,8 +1188,15 @@ fn handle_event(
       rl.callbacks.emit(Info({ agent_id, message: msg }))
     }
     SessionId(sid) => {
-      let msg = "[Session] agent=\{agent_id} session_id=\{sid}"
-      rl.callbacks.emit(Info({ agent_id, message: msg }))
+      let already_seen = match rl.seen_sessions.get(agent_id) {
+        Some(prev) => prev == sid
+        None => false
+      }
+      if not(already_seen) {
+        rl.seen_sessions[agent_id] = sid
+        let msg = "[Session] agent=\{agent_id} session_id=\{sid}"
+        rl.callbacks.emit(Info({ agent_id, message: msg }))
+      }
     }
     ToolCall(..) => ()
     ToolResult(..) => ()
