@@ -44,6 +44,7 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 - `ITERATION = 0` — ループ回数カウンタ
 - `PROCESSED_IDS = {}` — 処理済みチケットIDの集合
 - `ALL_RESULTS = []` — 全イテレーション結果の蓄積リスト
+- `PR_CREATED_TICKETS = []` — PR 作成済みチケットのリスト（各要素: チケットID、PR URL、ブランチ名）
 
 引数を解析し、`PRIORITY_THRESHOLD`、`SEQUENTIAL`、`DRY_RUN`、`TYPE_FILTER` を設定する。
 
@@ -86,12 +87,14 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    bd show <ticket-id>
    bd sql "SELECT acceptance_criteria, notes, design FROM issues WHERE id='<ticket-id>'"
    bd comments <ticket-id>
+   bd label list <ticket-id>
    ```
 
    以下を記録する:
    - タイトル、説明、種別、優先度（`bd show` から）
    - acceptance_criteria、notes、design（`bd sql` から。値が空/NULLでないもののみ）
    - comments（`bd comments` から。コメントが存在する場合のみ）
+   - LABELS（`bd label list` から。ラベルが存在する場合のみ）
 
 7. **並列安全性の分析**（`SEQUENTIAL=true` の場合はスキップ、全て直列）:
    - 各チケットの説明から対象ファイルパス・モジュール名を抽出
@@ -111,9 +114,9 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 
    ### Batch 1 (並列)
 
-   | ID            | 優先度 | 種別 | タイトル |
-   | ------------- | ------ | ---- | -------- |
-   | whirlwind-xxx | P1     | bug  | ...      |
+   | ID            | 優先度 | 種別 | ラベル        | タイトル |
+   | ------------- | ------ | ---- | ------------- | -------- |
+   | whirlwind-xxx | P1     | bug  | needs-review  | ...      |
    ```
 
 9. `DRY_RUN=true` の場合:
@@ -156,7 +159,8 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 
 2. **有効チケット数による分岐**:
    - 0 件 → 次バッチへ
-   - 1 件 → サブエージェントを起動せず Phase 2 の手順を直接実行する
+   - 1 件 **かつ** `needs-review` ラベルなし → サブエージェントを起動せず Phase 2 の手順を直接実行する
+   - 1 件 **かつ** `needs-review` ラベルあり → PR 用ブランチが必要なため、worktree でサブエージェントを起動する（下記と同じ方法）
    - 2 件以上 → 各チケットに対してサブエージェントを**並列起動**する:
 
      ```
@@ -185,12 +189,57 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    - 変数名の不整合（例: 一方が `tasks`、他方が `pending_tasks`）は、
      メインブランチ側の命名を優先して統一する
    - `git add <resolved-files> && git commit --no-edit` でマージコミット作成
-     c. 全ブランチのマージ完了後、worktree とブランチをクリーンアップ:
+     c. **`needs-review` ラベル付きチケット**の worktree はマージしない。代わりにステップ 4b（PR 作成）で処理する。
+
+     d. `needs-review` ラベルなしの全ブランチのマージ完了後、worktree とブランチをクリーンアップ:
 
    ```bash
    git worktree remove --force <worktree-path>
    git branch -D <worktree-branch>
    ```
+
+4b. **PR 作成**（`needs-review` ラベル付きチケットのみ）:
+
+   バッチ内の `needs-review` ラベル付きチケットについて、worktree ブランチから PR を作成する:
+
+   a. worktree ブランチを remote に push:
+   ```bash
+   git push -u origin <worktree-branch>
+   ```
+
+   b. `gh pr create` で PR 作成:
+   ```bash
+   gh pr create --head <worktree-branch> --title "<type>(<scope>): <title>" --body "$(cat <<'EOF'
+   ## Summary
+
+   Resolves <TICKET_ID>
+
+   <チケットの説明から要約>
+
+   ## Acceptance Criteria
+
+   <AC があれば記載>
+
+   ## Test plan
+
+   - [x] `just test` passed
+   - [ ] `just live` (reviewer should verify)
+   EOF
+   )"
+   ```
+
+   c. チケットにノートとして PR URL を追加:
+   ```bash
+   bd update <id> --notes="PR created: <PR-URL>. Awaiting review."
+   ```
+
+   d. worktree をクリーンアップ（**ブランチは残す** — PR に必要）:
+   ```bash
+   git worktree remove --force <worktree-path>
+   ```
+   ※ `git branch -D` は実行しない
+
+   e. 結果を `PR_CREATED_TICKETS` リストに記録する（チケットID、PR URL、ブランチ名）
 
 5. **コード品質改善 (`/simplify`)**:
 
@@ -245,7 +294,7 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 
 8. 全バッチ完了後:
    - 結果を `ALL_RESULTS` に追加
-   - **このイテレーションの成功チケットを即座にクローズ**:
+   - **このイテレーションの成功チケットを即座にクローズ**（`needs-review` ラベル付きチケットは除く — PR マージ後に人間がクローズする）:
      ```bash
      bd close <id1> <id2> ... --reason="Fixed in commit <hash>."
      ```
@@ -290,7 +339,7 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 
 1. **未クローズの成功チケットをクローズ**:
 
-   Phase 3 で既にクローズ済みのチケットはスキップし、残りの成功チケットをクローズする:
+   Phase 3 で既にクローズ済みのチケット、および `needs-review` ラベル付き（PR 作成済み）のチケットはスキップし、残りの成功チケットをクローズする:
 
    ```bash
    bd close <id> --reason="Fixed in commit <hash>. Regression test added."
@@ -326,6 +375,11 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    | チケット | タイトル | 理由 | イテレーション |
    | -------- | -------- | ---- | -------------- |
 
+   ### レビュー待ち (PR 作成済み)
+
+   | チケット | タイトル | PR URL | イテレーション |
+   | -------- | -------- | ------ | -------------- |
+
    ### 新規起票バグ
 
    | チケット | タイトル | 優先度 |
@@ -356,3 +410,6 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 | `just live` 失敗                           | Phase 4 で障害分離・バグ起票                                                         |
 | サーキットブレーカー発動（5回）            | 残バグ報告して Phase 5 へ                                                            |
 | サブエージェント タイムアウト              | 失敗扱い、ノート追加、次へ                                                           |
+| `needs-review` ラベル付きチケット成功      | main にマージせず PR 作成、チケットはクローズしない（レビュー待ち）                   |
+| `gh pr create` 失敗                        | エラーをノートに追加、チケットは失敗扱い（ブランチは残す）                             |
+| `git push` 失敗（PR 用ブランチ push）      | エラーをノートに追加、チケットは失敗扱い                                               |
