@@ -110,9 +110,10 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    **モード**: 並列 / 直列
 
    ### Batch 1 (並列)
-   | ID | 優先度 | 種別 | タイトル |
-   |----|--------|------|---------|
-   | whirlwind-xxx | P1 | bug | ... |
+
+   | ID            | 優先度 | 種別 | タイトル |
+   | ------------- | ------ | ---- | -------- |
+   | whirlwind-xxx | P1     | bug  | ...      |
    ```
 
 9. `DRY_RUN=true` の場合:
@@ -126,6 +127,7 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 各チケットは `references/ticket-execution-protocol.md` の手順に従って実行する。
 
 サブエージェントへのプロンプトには以下を含める:
+
 - `references/ticket-execution-protocol.md` の全内容
 - 対象チケットID
 - チケットのタイトルと説明（`bd show` の出力）
@@ -136,6 +138,7 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 - プロジェクトのテストコマンド: `just test`, `just live`
 
 サブエージェントは以下を返す:
+
 - 成功/失敗のステータス
 - commit hash（成功時）
 - 変更ファイル一覧
@@ -178,15 +181,16 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 
    a. `git merge <worktree-branch> --no-edit`
    b. **競合が発生した場合**:
-      - 競合マーカーを解析し、両方の変更を保持する方向で解決する
-      - 変数名の不整合（例: 一方が `tasks`、他方が `pending_tasks`）は、
-        メインブランチ側の命名を優先して統一する
-      - `git add <resolved-files> && git commit --no-edit` でマージコミット作成
-   c. 全ブランチのマージ完了後、worktree とブランチをクリーンアップ:
-      ```bash
-      git worktree remove --force <worktree-path>
-      git branch -D <worktree-branch>
-      ```
+   - 競合マーカーを解析し、両方の変更を保持する方向で解決する
+   - 変数名の不整合（例: 一方が `tasks`、他方が `pending_tasks`）は、
+     メインブランチ側の命名を優先して統一する
+   - `git add <resolved-files> && git commit --no-edit` でマージコミット作成
+     c. 全ブランチのマージ完了後、worktree とブランチをクリーンアップ:
+
+   ```bash
+   git worktree remove --force <worktree-path>
+   git branch -D <worktree-branch>
+   ```
 
 5. **コード品質改善 (`/simplify`)**:
 
@@ -199,12 +203,12 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    ```
 
    - `/simplify` が変更を行った場合:
-     a. 変更ファイルをフォーマット（`moon fmt` / `npx prettier --write`）
+     a. 変更ファイルをフォーマット（`moon fmt` / `prettier --write`）
      b. コミットする:
-        ```bash
-        git add <changed-files>
-        git commit -m "refactor: simplify batch code"
-        ```
+     ```bash
+     git add <changed-files>
+     git commit -m "refactor: simplify batch code"
+     ```
    - `/simplify` が変更を行わなかった場合 → そのままステップ6 へ
 
 6. **マージ後検証**:
@@ -308,22 +312,27 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
    **処理チケット数**: <N>（全イテレーション合計）
 
    ### 完了
+
    | チケット | タイトル | Commit | テスト | イテレーション |
-   |----------|---------|--------|--------|--------------|
+   | -------- | -------- | ------ | ------ | -------------- |
 
    ### 失敗
+
    | チケット | タイトル | エラー | イテレーション |
-   |----------|---------|--------|--------------|
+   | -------- | -------- | ------ | -------------- |
 
    ### スキップ
+
    | チケット | タイトル | 理由 | イテレーション |
-   |----------|---------|------|--------------|
+   | -------- | -------- | ---- | -------------- |
 
    ### 新規起票バグ
+
    | チケット | タイトル | 優先度 |
-   |----------|---------|--------|
+   | -------- | -------- | ------ |
 
    ### テスト結果
+
    - `just test`: PASS / FAIL
    - `just live`: PASS / FAIL
    ```
@@ -332,18 +341,18 @@ arguments: priority:優先度閾値(P0-P4、デフォルトP3)
 
 ## エラーハンドリング
 
-| シナリオ | アクション |
-|----------|-----------|
-| `bd ready` + `in_progress` が 0 件（初回） | 「対象チケットなし」で終了 |
-| `in_progress` チケット発見 | `RESUMED=true` フラグ付与、claim スキップ、`git checkout -- .` でクリーンスタート |
-| 再スキャンで新規チケット 0 件 | ループ終了、Phase 5 へ |
-| チケットが実行前に closed/deferred/blocked | スキップ、`PROCESSED_IDS` に追加、次のチケットへ |
-| `bd update --claim` 失敗 | スキップ、次のチケットへ |
-| TDD テスト作成失敗 | チケットを失敗マーク、unclaim、次へ |
-| 実装後 `just test` 失敗 | 変更を revert、失敗マーク、次へ |
-| worktree マージ競合 | 競合解決 → `just test` → 失敗なら revert + P1 バグ起票 |
-| `/simplify` 後の `just test` 失敗 | `/simplify` コミットを revert し再テスト。それでも失敗なら既存のステップ6 失敗パスへ |
-| マージ後 `just test` 失敗（3回） | バッチ変更を revert、P1 バグ起票、次バッチ続行 |
-| `just live` 失敗 | Phase 4 で障害分離・バグ起票 |
-| サーキットブレーカー発動（5回） | 残バグ報告して Phase 5 へ |
-| サブエージェント タイムアウト | 失敗扱い、ノート追加、次へ |
+| シナリオ                                   | アクション                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `bd ready` + `in_progress` が 0 件（初回） | 「対象チケットなし」で終了                                                           |
+| `in_progress` チケット発見                 | `RESUMED=true` フラグ付与、claim スキップ、`git checkout -- .` でクリーンスタート    |
+| 再スキャンで新規チケット 0 件              | ループ終了、Phase 5 へ                                                               |
+| チケットが実行前に closed/deferred/blocked | スキップ、`PROCESSED_IDS` に追加、次のチケットへ                                     |
+| `bd update --claim` 失敗                   | スキップ、次のチケットへ                                                             |
+| TDD テスト作成失敗                         | チケットを失敗マーク、unclaim、次へ                                                  |
+| 実装後 `just test` 失敗                    | 変更を revert、失敗マーク、次へ                                                      |
+| worktree マージ競合                        | 競合解決 → `just test` → 失敗なら revert + P1 バグ起票                               |
+| `/simplify` 後の `just test` 失敗          | `/simplify` コミットを revert し再テスト。それでも失敗なら既存のステップ6 失敗パスへ |
+| マージ後 `just test` 失敗（3回）           | バッチ変更を revert、P1 バグ起票、次バッチ続行                                       |
+| `just live` 失敗                           | Phase 4 で障害分離・バグ起票                                                         |
+| サーキットブレーカー発動（5回）            | 残バグ報告して Phase 5 へ                                                            |
+| サブエージェント タイムアウト              | 失敗扱い、ノート追加、次へ                                                           |

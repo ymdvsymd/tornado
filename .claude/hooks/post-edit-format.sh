@@ -36,7 +36,7 @@ fi
 
 # Run prettier --write on the file, capture any output
 format_output=""
-if ! format_output="$(npx prettier --write "$file_path" 2>&1)"; then
+if ! format_output="$(prettier --write "$file_path" 2>&1)"; then
   # Formatting failed — report via hookSpecificOutput
   jq -n --arg msg "prettier formatting failed for $file_path: $format_output" \
     '{"hookSpecificOutput": {"additionalContext": $msg}}'
@@ -45,7 +45,7 @@ fi
 
 # Check if there are still issues (run --check after --write)
 check_output=""
-if ! check_output="$(npx prettier --check "$file_path" 2>&1)"; then
+if ! check_output="$(prettier --check "$file_path" 2>&1)"; then
   jq -n --arg msg "prettier: formatting issues remain in $file_path: $check_output" \
     '{"hookSpecificOutput": {"additionalContext": $msg}}'
 fi

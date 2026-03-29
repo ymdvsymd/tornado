@@ -29,7 +29,7 @@ echo ""
 run_gate "moon-fmt"         moon fmt --check
 run_gate "moon-check"       moon check --target js
 run_gate "build-sdk"        npm run -s build:sdk
-run_gate "prettier"         npx prettier --check 'sdk/**/*.{mts,mjs}'
+run_gate "prettier"         prettier --check 'sdk/**/*.{mts,mjs}'
 run_gate "node-tests"       node --test sdk/*.test.mjs
 run_gate "moon-tests"       moon test --target js
 

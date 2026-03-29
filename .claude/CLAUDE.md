@@ -19,7 +19,7 @@ just fmt       # MoonBit フォーマット
 ## 品質ルール
 - コミット前に `just test` を実行すること
 - プッシュ前に `just live` を実行すること
-- `moon fmt` と `npx prettier --write` でフォーマット
+- `moon fmt` と `prettier --write` でフォーマット
 - テスト以外のファイルで `console.log` 禁止 (hook で強制)
 
 ## 課題管理
@@ -35,9 +35,9 @@ just fmt       # MoonBit フォーマット
 ## ルール一覧
 詳細な規約は `.claude/rules/` 配下に定義されている。
 
-| ファイル | 概要 |
-|---|---|
+| ファイル                  | 概要                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
 | `rules/build-and-test.md` | ビルド・テスト規約 — just コマンド必須、live 結合テスト必須、バグ修正時リグレッションテスト必須 |
-| `rules/planning.md` | 計画作成規約 — Plan mode 出力規約、計画ファイルに live 結合テストを含める |
-| `rules/bd-workflow.md` | bd チケット運用規約 — 計画のチケット登録、結合テストバグのチケット起票 |
-| `rules/research.md` | 技術調査規約 — ref MCP ツールの併用 |
+| `rules/planning.md`       | 計画作成規約 — Plan mode 出力規約、計画ファイルに live 結合テストを含める                       |
+| `rules/bd-workflow.md`    | bd チケット運用規約 — 計画のチケット登録、結合テストバグのチケット起票                          |
+| `rules/research.md`       | 技術調査規約 — ref MCP ツールの併用                                                             |
