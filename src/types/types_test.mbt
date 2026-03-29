@@ -68,7 +68,14 @@ test "OrchestratorCallbacks unified event listener carries correct values" {
       match e {
         AgentOutput(ev) => outputs.push(ev.agent_id + ":" + ev.line)
         Info(ev) => outputs.push("info:" + ev.message)
-        _ => ()
+        AgentComplete(_)
+        | TaskStart(_)
+        | TaskComplete(_)
+        | TaskAssign(_)
+        | ReviewStart(_)
+        | ReviewComplete(_)
+        | PhaseChange(_)
+        | SessionComplete(_) => ()
       }
     },
     on_save: fn() {  },
