@@ -3,7 +3,7 @@ name: release
 description: >
   バージョンアップ → ビルド → コミット → push → npm パブリッシュの一連のリリースフローを実行。
   "release", "リリース", "パブリッシュ", "publish", "バージョンアップ", "version bump".
-arguments: version_bump:バージョンバンプ種別(patch|minor|major)。省略時は修正差分から推測。
+argument-hint: version_bump:バージョンバンプ種別 patch/minor/major。省略時は修正差分から推測。
 ---
 
 # release: npm リリースフロー

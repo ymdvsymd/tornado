@@ -4,7 +4,7 @@ description: >
   whirlwind実行ログを分析し、バグ・パフォーマンスボトルネックを検出してbdチケットを起票する。
   最新の.runsログを自動検出、またはパス指定可。タイムライン構築→異常検出→レポート→チケット起票。
   "log-audit", "ログ分析", "バグ検出", "ログレビュー", "run分析", "audit log", "analyze log".
-arguments: log_path:whirlwind.logのパス（省略時は.runs/内の最新ログを自動検出）
+argument-hint: log_path:whirlwind.logのパス（省略時は.runs/内の最新ログを自動検出）
 ---
 
 # log-audit

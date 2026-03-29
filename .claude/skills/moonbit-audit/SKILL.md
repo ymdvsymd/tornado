@@ -4,7 +4,7 @@ description: >
   リポジトリ全体の MoonBit コードを rules/ と skills/ のナレッジに照合し、
   規約違反を検出してリファクタリングチケットを起票する。バグ発見時はユーザー確認後に起票。
   "moonbit-audit", "MoonBitチェック", "コード規約チェック", "moonbit lint", "MoonBit audit".
-arguments: options:--priority=<0-4>(デフォルト優先度, default:3) --dry-run(レポートのみ) --module=<name>(特定モジュールのみ)
+argument-hint: options:--priority=N --dry-run --module=name
 ---
 
 # moonbit-audit: MoonBit 規約チェック & チケット起票

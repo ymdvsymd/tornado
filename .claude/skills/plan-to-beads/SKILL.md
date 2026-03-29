@@ -4,7 +4,7 @@ description: >
   計画ファイル(~/.claude/plans/)を解析し、各ステップをbdチケットとして一括起票する。
   優先度・needs-reviewの自動検出とACバリデーション、依存関係の設定、サマリー表示を行う。
   "plan-to-beads", "計画チケット化", "plan tickets", "bd create from plan", "計画をチケットに".
-arguments: plan_name:計画ファイル名(拡張子.mdは省略可)またはフルパス
+argument-hint: plan_name:計画ファイル名またはフルパス
 ---
 
 # plan-to-beads: 計画ファイルから bd チケット一括起票

@@ -4,7 +4,7 @@ description: >
   bdチケットを分析し、不足フィールドの補完・description の構造化・acceptance criteria 追加等を行う精緻化スキル。
   コードベースと技術ドキュメントを調査して修正対象ファイル・原因・修正方針を特定し、差分表示でユーザー確認後に更新。
   "bd-detail", "チケット精緻化", "チケット詳細化", "ticket detail", "ticket elaborate", "detail ticket".
-arguments: ticket_id:bdチケットID（必須）。複数指定可（スペース区切り）
+argument-hint: ticket_id:bdチケットID。複数指定可
 ---
 
 # bd-detail: bd チケット精緻化

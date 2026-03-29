@@ -4,7 +4,7 @@ description: >
   Markdown計画ファイルを whirlwind CLI の `--plan` フラグで直接起動し、バックグラウンド実行と進捗監視を行う。
   責務は起動コマンドの組み立てと監視のみ。
   "ralph", "plan file", "launch whirlwind", "whirlwind monitoring", "background launch", "計画ファイルから起動".
-arguments: plan_file:計画ファイル(Markdown)のパス
+argument-hint: plan_file:計画ファイルのパス
 ---
 
 # ralph-whirlwind: plan file から whirlwind 起動
