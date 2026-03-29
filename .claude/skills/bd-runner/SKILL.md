@@ -47,6 +47,7 @@ origin: whirlwind
 - `PROCESSED_IDS = {}` — 処理済みチケットIDの集合
 - `ALL_RESULTS = []` — 全イテレーション結果の蓄積リスト
 - `PR_CREATED_TICKETS = []` — PR 作成済みチケットのリスト（各要素: チケットID、PR URL、ブランチ名）
+- `DEFERRED_TICKETS = []` — needs-review 依存で延期されたチケットのリスト（各要素: チケットID、タイトル、重複ファイル、依存先 needs-review チケットID）
 
 引数を解析し、`PRIORITY_THRESHOLD`、`SEQUENTIAL`、`DRY_RUN`、`TYPE_FILTER` を設定する。
 
@@ -126,6 +127,34 @@ origin: whirlwind
    - 同一ファイルに言及するチケット → 別バッチ（直列）
    - 判定不能 → 別バッチ（保守的に直列）
 
+8b. **needs-review ファイル重複検出**:
+
+   needs-review ラベル付きチケットと同一ファイルを変更する非 needs-review チケットを検出し、バッチから除外する。
+   needs-review チケットは main にマージされず PR として分離されるため、同一ファイルを変更する非 needs-review チケットが先に main にマージされると不整合が起きる。
+
+   ```
+   NR_FILES = {}  // needs-review チケットの対象ファイルパス → チケットID のマップ
+
+   FOR ticket IN batch_tickets:
+     IF "needs-review" IN ticket.LABELS:
+       FOR file IN ticket.target_files:
+         NR_FILES[file] = ticket.id
+
+   FOR ticket IN batch_tickets:
+     IF "needs-review" NOT IN ticket.LABELS:
+       overlap = ticket.target_files ∩ NR_FILES.keys()
+       IF overlap IS NOT EMPTY:
+         DEFERRED_TICKETS.append({
+           id: ticket.id,
+           title: ticket.title,
+           overlapping_files: overlap,
+           blocked_by: [NR_FILES[f] FOR f IN overlap]
+         })
+         // バッチから除外するが PROCESSED_IDS には追加しない
+         // → 次イテレーションで再スキャン対象になる
+         REMOVE ticket FROM batch_tickets
+   ```
+
 9. 実行計画を表示:
 
    ```markdown
@@ -141,6 +170,12 @@ origin: whirlwind
    | ID            | 優先度 | 種別 | ラベル        | タイトル |
    | ------------- | ------ | ---- | ------------- | -------- |
    | whirlwind-xxx | P1     | bug  | needs-review  | ...      |
+
+   ### 延期 (needs-review 依存)
+
+   | ID            | タイトル | 重複ファイル       | 依存先 (needs-review) |
+   | ------------- | -------- | ------------------ | --------------------- |
+   | whirlwind-yyy | ...      | src/foo.mbt        | whirlwind-xxx         |
    ```
 
 10. `DRY_RUN=true` の場合:
@@ -321,10 +356,29 @@ origin: whirlwind
 
 8. 全バッチ完了後:
    - 結果を `ALL_RESULTS` に追加
-   - **このイテレーションの成功チケットを即座にクローズ**（`needs-review` ラベル付きチケットは除く — PR マージ後に人間がクローズする）:
-     ```bash
-     bd close <id1> <id2> ... --reason="Fixed in commit <hash>."
+   - **このイテレーションの成功チケットを即座にクローズ**:
+
      ```
+     ┌─────────────────────────────────────────────────────────┐
+     │ CLOSE GUARD — needs-review チケットは絶対にクローズしない │
+     └─────────────────────────────────────────────────────────┘
+
+     CLOSEABLE_IDS = []
+
+     FOR ticket IN successful_tickets:
+       IF "needs-review" IN ticket.LABELS:
+         // ██ DO NOT CLOSE ██
+         // ██ DO NOT CLOSE ██
+         // ██ DO NOT CLOSE ██
+         // needs-review チケットは PR マージ後に人間がクローズする
+         SKIP
+       ELSE:
+         CLOSEABLE_IDS.append(ticket.id)
+
+     IF CLOSEABLE_IDS IS NOT EMPTY:
+       bd close <CLOSEABLE_IDS> --reason="Fixed in commit <hash>."
+     ```
+
      依存先のチケットがunblockされ、次の再スキャンで拾えるようになる。
    - 外部ループの次のイテレーションへ（Phase 1 に戻り `bd ready` を再スキャン）
    - サーキットブレーカー（`ITERATION >= 5`）到達時は Phase 5 へ
@@ -366,10 +420,27 @@ origin: whirlwind
 
 1. **未クローズの成功チケットをクローズ**:
 
-   Phase 3 で既にクローズ済みのチケット、および `needs-review` ラベル付き（PR 作成済み）のチケットはスキップし、残りの成功チケットをクローズする:
+   Phase 3 で既にクローズ済みのチケットをスキップし、残りの成功チケットに CLOSE GUARD を適用する:
 
-   ```bash
-   bd close <id> --reason="Fixed in commit <hash>. Regression test added."
+   ```
+   ┌─────────────────────────────────────────────────────────┐
+   │ CLOSE GUARD — needs-review チケットは絶対にクローズしない │
+   └─────────────────────────────────────────────────────────┘
+
+   CLOSEABLE_IDS = []
+
+   FOR ticket IN unclosed_successful_tickets:
+     IF "needs-review" IN ticket.LABELS:
+       // ██ DO NOT CLOSE ██
+       // ██ DO NOT CLOSE ██
+       // ██ DO NOT CLOSE ██
+       // needs-review チケットは PR マージ後に人間がクローズする
+       SKIP
+     ELSE:
+       CLOSEABLE_IDS.append(ticket.id)
+
+   IF CLOSEABLE_IDS IS NOT EMPTY:
+     bd close <CLOSEABLE_IDS> --reason="Fixed in commit <hash>. Regression test added."
    ```
 
 2. **失敗チケットのノート追加**:
@@ -412,6 +483,11 @@ origin: whirlwind
    | チケット | タイトル | PR URL | イテレーション |
    | -------- | -------- | ------ | -------------- |
 
+   ### 延期 (needs-review 依存)
+
+   | チケット | タイトル | 重複ファイル | 依存先 (needs-review) |
+   | -------- | -------- | ------------ | --------------------- |
+
    ### 新規起票バグ
 
    | チケット | タイトル | 優先度 |
@@ -444,6 +520,7 @@ origin: whirlwind
 | サーキットブレーカー発動（5回）            | 残バグ報告して Phase 5 へ                                                            |
 | サブエージェント タイムアウト              | 失敗扱い、ノート追加、次へ                                                           |
 | `needs-review` ラベル付きチケット成功      | main にマージせず PR 作成、チケットはクローズしない（レビュー待ち）                   |
+| needs-review とファイル重複する非NRチケット | `DEFERRED_TICKETS` に追加しバッチから除外。`PROCESSED_IDS` には追加しない（次イテレーションで再スキャン） |
 | `gh pr create` 失敗                        | エラーをノートに追加、チケットは失敗扱い（ブランチは残す）                             |
 | `git push` 失敗（PR 用ブランチ push）      | エラーをノートに追加、チケットは失敗扱い                                               |
 
