@@ -38,6 +38,7 @@ just fmt       # MoonBit フォーマット
 | ファイル                  | 概要                                                                                            |
 | ------------------------- | ----------------------------------------------------------------------------------------------- |
 | `rules/build-and-test.md` | ビルド・テスト規約 — just コマンド必須、live 結合テスト必須、バグ修正時リグレッションテスト必須 |
-| `rules/planning.md`       | 計画作成規約 — Plan mode 出力規約、計画ファイルに live 結合テストを含める                       |
-| `rules/bd-workflow.md`    | bd チケット運用規約 — 計画のチケット登録、結合テストバグのチケット起票                          |
-| `rules/research.md`       | 技術調査規約 — ref MCP ツールの併用                                                             |
+| `rules/planning.md`           | 計画作成規約 — Plan mode 出力規約、ランタイムコード変更時は live 結合テスト必須             |
+| `rules/bd-workflow.md`        | bd チケット運用規約 — 計画のチケット登録、結合テストバグのチケット起票                      |
+| `rules/bd-ticket-quality.md`  | bd チケット品質基準 — description テンプレート、AC 要件、品質ゲート（P4 強制ルール）        |
+| `rules/research.md`           | 技術調査規約 — ref MCP ツールの併用                                                        |
