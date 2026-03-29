@@ -1,6 +1,9 @@
 ---
 name: moonbit-testing
-description: MoonBitテストパターン — ユニットテスト、スナップショットテスト、ベンチマーク、カバレッジ。TDD方法論に準拠。
+description: >
+  MoonBitテストパターン — ユニットテスト、スナップショットテスト、ベンチマーク、カバレッジ。TDD方法論に準拠。
+  MoonBitのテスト作成・TDDワークフロー・カバレッジ計測時に使う。
+  "moonbit-testing", "MoonBitテスト", "MoonBit TDD", "moonbit test", "moonbit coverage", "スナップショットテスト".
 origin: ECC
 ---
 

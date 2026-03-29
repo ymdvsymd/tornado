@@ -1,6 +1,9 @@
 ---
 name: moonbit-patterns
-description: MoonBitのイディオマティックパターン、エラー処理、トレイト、非同期、開発ベストプラクティス。安全で保守性の高いアプリケーション構築のための参照文献。
+description: >
+  MoonBitのイディオマティックパターン、エラー処理、トレイト、非同期、開発ベストプラクティス。安全で保守性の高いアプリケーション構築のための参照文献。
+  MoonBitコードの新規作成・レビュー・リファクタリング時に使う。
+  "moonbit-patterns", "MoonBitパターン", "MoonBit書き方", "moonbit idiom", "moonbit best practice", "MoonBit開発".
 origin: ECC
 ---
 
