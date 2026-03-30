@@ -26,6 +26,7 @@ jobs:
       - run: npx prettier --check 'sdk/**/*.{mts,mjs}'
       - run: just pack
       - run: just test
+      - run: just test-hooks
       - run: just mock
       - name: Check test coverage
         run: |

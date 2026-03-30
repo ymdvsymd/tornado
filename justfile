@@ -12,6 +12,9 @@ test:
   node --test sdk/*.test.mjs
   moon test --target js
 
+test-hooks:
+  node --test tests/hooks/hooks.test.mjs
+
 mock: pack
   bash tests/e2e-ralph.sh mock
 
