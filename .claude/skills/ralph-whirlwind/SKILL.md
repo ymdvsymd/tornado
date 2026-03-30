@@ -60,7 +60,7 @@ origin: whirlwind
 1. 実行コマンドを**1つだけ**組み立てる。変換処理や中間 JSON 生成は行わない。
 
    ```bash
-   bin/whirlwind.js --plan=<PLAN_FILE_ABS> [--planner=<PLANNER_KIND>] [--builder=<BUILDER_KIND>] [--verifier=<VERIFIER_KIND>] --log=<LOG_PATH> --lang=en
+   bin/whirlwind.js --plan=<PLAN_FILE_ABS> [--planner=<PLANNER_KIND>] [--builder=<BUILDER_KIND>] [--verifier=<VERIFIER_KIND>] --run-log
    ```
 
 2. 上記コマンドをバックグラウンドで起動する。

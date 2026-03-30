@@ -24,7 +24,7 @@ export function createCodexAdapter(deps = {}) {
         model: opts.model || undefined,
         workingDirectory: opts.cwd || process.cwd(),
         approvalPolicy: "never",
-        sandboxMode: "danger-full-access",
+        sandboxMode: "workspace-write",
       };
       const { thread, log } = opts.threadId
         ? resumeThread(client, opts.threadId, threadOpts)
